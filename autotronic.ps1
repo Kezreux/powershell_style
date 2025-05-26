@@ -268,7 +268,7 @@ function Ensure-TerminalIcons {
 
 function Ensure-NerdFonts {
     param(
-        [string[]]$Fonts = @('FiraCode','Hack')  # default set; modify as desired
+        [string[]]$Fonts = @('Hack')  # default set; modify as desired
     )
     Write-Log "Ensuring Nerd Fonts: $($Fonts -join ', ')" 'INFO'
     Install-NerdFonts -Fonts $Fonts
@@ -289,6 +289,22 @@ if (-not (Test-Path $themeDir)) {
 
 $themeUrl = "$github/theme/aanestad.omp.json"
 Update-RemoteFile -Url $themeUrl -DestinationPath $themeFile
+
+
+$remoteProfile = "$github/profile/Microsoft.PowerShell_profile.ps1"
+$targetProfile = $Profile.CurrentUserAllHosts
+
+$profileDir = Split-Path $targetProfile
+if (-not (Test-Path $profileDir)) {
+    Write-Log "Creating profile directory $profileDir" 'INFO'
+    New-Item -Path $profileDir -ItemType Directory | Out-Null
+}
+
+Update-RemoteFile `
+  -Url $remoteProfile `
+  -DestinationPath $targetProfile
+
+Write-Log "Replaced default profile with custom profile at:`n  $targetProfile" 'INFO'
 
 #-----------------RUN THE INSTALLER-----------------#
 Ensure-OhMyPosh
