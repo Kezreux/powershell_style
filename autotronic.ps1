@@ -42,14 +42,14 @@ function Test-OhMyPoshInstalled {
 
 #-----------------INSTALLATION METHOD-----------------#
 function Install-WithWinget {
-    Write-Log "Attempting install via winget…" 'INFO' -ForegroundColor Cyan
+    Write-Log "Attempting install via winget…" 'INFO' 
     try {
         winget install --id JanDeDobbeleer.OhMyPosh -e --accept-package-agreements --accept-source-agreements -h
-        Write-Log "winget installation succeeded." 'INFO' -ForegroundColor Green
+        Write-Log "winget installation succeeded." 'INFO' 
         return $true
     }
     catch {
-        Write-Log "winget install failed: $_" 'WARN' -ForegroundColor Red
+        Write-Log "winget install failed: $_" 'WARN' 
         return $false
     }
 }
@@ -74,7 +74,7 @@ function Install-WithPSGallery {
 #-----------------MAIN ENTRY-----------------#
 function Ensure-OhMyPosh {
     if (Test-OhMyPoshInstalled) {
-        Write-Log "Oh My Posh is already installed. Skipping." 'INFO' -ForegroundColor Red
+        Write-Log "Oh My Posh is already installed. Skipping." 'INFO' 
         return
     }
 
