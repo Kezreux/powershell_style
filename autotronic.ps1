@@ -3,12 +3,25 @@
 #-----------------LOGGING PARAMETERS-----------------#
 
 function Write-Log {
+    [CmdletBinding()]
     param(
-        [string]$Message,
-        [ValidateSet('INFO','WARN','ERROR')] [string]$Level = 'INFO'
+        [Parameter(Mandatory)][string]$Message,
+        [ValidateSet('INFO','WARN','ERROR')][string]$Level = 'INFO',
+        [ConsoleColor]$Color
     )
+
+    # Determine timestamp and level color default
     $timestamp = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
-    Write-Output "[$timestamp] [$Level] $Message"
+    if (-not $PSBoundParameters.ContainsKey('Color')) {
+        switch ($Level) {
+            'ERROR' { $Color = 'Red'    }
+            'WARN'  { $Color = 'Yellow' }
+            default { $Color = 'White'  }
+        }
+    }
+
+    # Write to host with color
+    Write-Host "[$timestamp] [$Level] $Message" -ForegroundColor $Color
 }
 
 
