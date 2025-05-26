@@ -269,11 +269,11 @@ function Ensure-OhMyPosh {
     else {
         Write-Host "⚠ POSH_THEMES_PATH not set; Oh My Posh theme not applied." -ForegroundColor Yellow
     }
-}
-else {
-    Write-Host "⚠ oh-my-posh.exe not found; using default prompt." -ForegroundColor Yellow
-}
-}
+    }
+    else {
+        Write-Host "⚠ oh-my-posh.exe not found; using default prompt." -ForegroundColor Yellow
+    }
+
 
     # Fallback to PowerShell Gallery
     if (Install-WithPSGallery) {
