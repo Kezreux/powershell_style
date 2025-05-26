@@ -39,11 +39,23 @@ foreach ($path in $wtTargets) {
     }
 }
 
-#────────────────────────── 3. PowerShell‑profil ────────────────────────────
+#────────────────────────── 3. PowerShell-profil ────────────────────────────
 Write-Host "`n→ Overriding PowerShell profile" -ForegroundColor Cyan
 $profilePath = $PROFILE.CurrentUserAllHosts
+$profileDir  = Split-Path $profilePath -Parent
+
+# ← Add these two lines:
+if (-not (Test-Path $profileDir)) {
+    New-Item -ItemType Directory -Path $profileDir -Force | Out-Null
+}
+
+# now you can safely delete + download
 Remove-Item $profilePath -Force -ErrorAction SilentlyContinue
-Invoke-RestMethod -Uri "$github/profile/Microsoft.PowerShell_profile.ps1" -OutFile $profilePath -UseBasicParsing
+Invoke-RestMethod `
+  -Uri  "$github/profile/Microsoft.PowerShell_profile.ps1" `
+  -OutFile $profilePath `
+  -UseBasicParsing
+
 Write-Host "   • $profilePath overwritten"
 
 #────────────────────────── 4. Oh‑My‑Posh‑tema ──────────────────────────────
