@@ -58,7 +58,7 @@ function Install-WithPSGallery {
 #-----------------MAIN ENTRY-----------------#
 function Ensure-OhMyPosh {
     if (Test-OhMyPoshInstalled) {
-        Write-Log "Oh My Posh is already installed. Skipping." 'INFO'
+        Write-Log "Oh My Posh is already installed. Skipping." 'INFO' -ForegroundColor Red
         return
     }
 
