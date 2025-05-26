@@ -94,7 +94,7 @@ function Copy-Themes-And-Profile {
     }
 
     # Copy (and overwrite) all .ps1 profile scripts
-    Get-ChildItem -Path (Join-Path $ScriptDir 'profile') -Filter '*.ps1' | ForEach-Object {
+    Get-ChildItem -Path (Join-Path $ScriptDir 'profile') -Filter 'Microsoft.PowerShell_profile.ps1' | ForEach-Object {
         $dest = Join-Path $profileDir $_.Name
         Copy-Item -Path $_.FullName -Destination $dest -Force
         Write-Host "✔ Copied/Overwrote profile: $($_.Name)" -ForegroundColor Green
@@ -107,7 +107,7 @@ function Copy-Themes-And-Profile {
     }
 
     # Copy (and overwrite) all .omp.json themes
-    Get-ChildItem -Path (Join-Path $ScriptDir 'theme') -Filter '*.omp.json' | ForEach-Object {
+    Get-ChildItem -Path (Join-Path $ScriptDir 'theme') -Filter 'aanestad.omp.json' | ForEach-Object {
         $destTheme = Join-Path $themeDest $_.Name
         Copy-Item -Path $_.FullName -Destination $destTheme -Force
         Write-Host "✔ Copied/Overwrote theme: $($_.Name)" -ForegroundColor Green
