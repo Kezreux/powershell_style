@@ -159,7 +159,7 @@ function Install-NerdFonts {
             Invoke-WebRequest -Uri $url -OutFile $zipPath -UseBasicParsing
         }
         catch {
-            Write-Log "Failed to download $zipName: $($_)" 'ERROR'
+            Write-Log "Failed to download ${zipName}: $($_)" 'ERROR'
             continue
         }
 
