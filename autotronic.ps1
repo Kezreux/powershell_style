@@ -26,14 +26,14 @@ function Test-OhMyPoshInstalled {
 
 #-----------------INSTALLATION METHOD-----------------#
 function Install-WithWinget {
-    Write-Log "Attempting install via winget…" 'INFO'
+    Write-Log "Attempting install via winget…" 'INFO' -ForegroundColor Cyan
     try {
         winget install --id JanDeDobbeleer.OhMyPosh -e --accept-package-agreements --accept-source-agreements -h
-        Write-Log "winget installation succeeded." 'INFO'
+        Write-Log "winget installation succeeded." 'INFO' -ForegroundColor Green
         return $true
     }
     catch {
-        Write-Log "winget install failed: $_" 'WARN'
+        Write-Log "winget install failed: $_" 'WARN' -ForegroundColor Red
         return $false
     }
 }
