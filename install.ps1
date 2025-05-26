@@ -50,7 +50,7 @@ foreach ($url in $fileMap.Keys) {
     Invoke-RestMethod -Uri $url -OutFile $dst -UseBasicParsing
 }
 
-Write-Host "`n→ Installing/updating PowerShell modules…" -ForegroundColor Cyan
+Write-Host "`n→ Installing PowerShell modules…" -ForegroundColor Cyan
 Set-PSRepository -Name PSGallery -InstallationPolicy Trusted -ErrorAction SilentlyContinue
 foreach ($mod in $modules) {
     if (Get-InstalledModule -Name $mod -ErrorAction SilentlyContinue) {
@@ -62,11 +62,11 @@ foreach ($mod in $modules) {
     }
 }
 
-Write-Host "`n→ Installing Hack Nerd Font via winget…" -ForegroundColor Cyan
+Write-Host "`n→ Installing Hack Nerd Font..." -ForegroundColor Cyan
 if (Get-Command winget -ErrorAction SilentlyContinue) {
     winget install --id $fontPackage -e --silent
 } else {
-    Write-Warning "   • winget not found; installer vil hoppe over fontinstallasjon."
+    Write-Warning "   • winget not found; installer skips the fonts."
 }
 
-Write-Host "`n✅ Fullførte oppsettet! Vennligst restart terminalen for å se endringene." -ForegroundColor Green
+Write-Host "`n✅ Setup complete, restart terminal." -ForegroundColor Green
