@@ -164,10 +164,10 @@ function Install-NerdFonts {
         }
 
         Write-Log "Extracting $zipName…" 'INFO'
-        Expand-Archive -Path $zipPath -DestinationPath $tmpDir
+        Expand-Archive -Path $zipPath -DestinationPath $tmpDir -Force
 
         # Copy all TTF/OTF files to Windows fonts folder
-        $fontFiles = Get-ChildItem -Path $tmpDir -Recurse -Include '*.ttf','*.otf'
+        $fontFiles = Get-ChildItem -Path $tmpDir -Recurse -Include "$font*.ttf","$font*.otf"
         foreach ($file in $fontFiles) {
             $destPath = Join-Path "$env:WINDIR\Fonts" $file.Name
             Write-Log "Installing font file $($file.Name)…" 'INFO'
