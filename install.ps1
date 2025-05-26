@@ -39,24 +39,41 @@ foreach ($path in $wtTargets) {
     }
 }
 
-#────────────────────────── 3. PowerShell-profil ────────────────────────────
+#────────────────────────── 3. PowerShell-profile ────────────────────────────
 Write-Host "`n→ Overriding PowerShell profile" -ForegroundColor Cyan
-$profilePath = $PROFILE.CurrentUserAllHosts
-$profileDir  = Split-Path $profilePath -Parent
 
-# ← Add these two lines:
-if (-not (Test-Path $profileDir)) {
-    New-Item -ItemType Directory -Path $profileDir -Force | Out-Null
+# 1) All-Hosts profile (loaded by any PS host)
+$allHostsProfile = $PROFILE.CurrentUserAllHosts
+$allHostsDir     = Split-Path $allHostsProfile -Parent
+
+# ensure directory exists
+if (-not (Test-Path $allHostsDir)) {
+    New-Item -ItemType Directory -Path $allHostsDir -Force | Out-Null
 }
 
-# now you can safely delete + download
-Remove-Item $profilePath -Force -ErrorAction SilentlyContinue
+# download your main profile
+Remove-Item $allHostsProfile -Force -ErrorAction SilentlyContinue
 Invoke-RestMethod `
   -Uri  "$github/profile/Microsoft.PowerShell_profile.ps1" `
-  -OutFile $profilePath `
+  -OutFile $allHostsProfile `
   -UseBasicParsing
+Write-Host "   • $allHostsProfile overwritten"
 
-Write-Host "   • $profilePath overwritten"
+# 2) Host-Specific stub (so `notepad $PROFILE` opens something
+$hostProfile = $PROFILE.CurrentUserCurrentHost
+$hostDir     = Split-Path $hostProfile -Parent
+
+if (-not (Test-Path $hostDir)) {
+    New-Item -ItemType Directory -Path $hostDir -Force | Out-Null
+}
+
+# write a one-line dot-source stub
+@"
+. `"$allHostsProfile`"
+"@ |
+  Out-File -FilePath $hostProfile -Encoding UTF8 -Force
+
+Write-Host "   • $hostProfile created (dot-sourcing All-Hosts profile)"
 
 #────────────────────────── 4. Oh‑My‑Posh‑tema ──────────────────────────────
 Write-Host "`n→ Overriding Oh‑My‑Posh theme" -ForegroundColor Cyan
