@@ -52,7 +52,7 @@ function Update-RemoteFile {
         Write-Log "Successfully updated $DestinationPath" 'INFO'
     }
     catch {
-        Write-Log "Failed to download $Url: $($_.Exception.Message)" 'ERROR'
+        Write-Log "Failed to download ${Url}: $($_.Exception.Message)" 'ERROR'
         throw "Update-RemoteFile failed for $DestinationPath"
     }
 }
