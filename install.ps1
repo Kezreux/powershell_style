@@ -82,7 +82,18 @@ foreach($m in 'PSReadLine','Terminal-Icons'){
 #────────────────────────── 6. Hack Nerd Font ───────────────────────────────
 Write-Host "`n→ Installing & registering Hack Nerd Font" -ForegroundColor Cyan
 
-# 1) Download & expand the zip (fallback for winget or always)
+# A) Try Winget first
+if (Get-Command winget -ErrorAction SilentlyContinue) {
+    Start-Process winget -ArgumentList @(
+        'install','--id','SourceFoundry.HackFonts','-e','--silent',
+        '--accept-source-agreements','--accept-package-agreements'
+    ) -NoNewWindow -Wait
+    Write-Host "   • winget exit code $LASTEXITCODE"
+} else {
+    Write-Warning "   • winget not found; falling back to manual install"
+}
+
+# B) Download & expand the official Hack Nerd Font ZIP
 $zipUrl   = 'https://github.com/ryanoasis/nerd-fonts/releases/download/v2.3.3/Hack.zip'
 $zipFile  = Join-Path $env:TEMP 'HackNerd.zip'
 Invoke-RestMethod -Uri $zipUrl -OutFile $zipFile -UseBasicParsing
@@ -90,28 +101,30 @@ Invoke-RestMethod -Uri $zipUrl -OutFile $zipFile -UseBasicParsing
 $userFontDir   = Join-Path $env:LOCALAPPDATA 'Microsoft\Windows\Fonts'
 $systemFontDir = "$env:WINDIR\Fonts"
 
-# 2) Ensure directories exist, then extract
-if (-not (Test-Path $userFontDir))   { New-Item -ItemType Directory -Path $userFontDir -Force | Out-Null }
+# Ensure target folders exist
+if (-not (Test-Path $userFontDir))   { New-Item $userFontDir -ItemType Directory -Force | Out-Null }
+
+# Extract TTFs to your user fonts
 Expand-Archive -Path $zipFile -DestinationPath $userFontDir -Force
 
-# 3) Copy to system fonts too (so it lives in Fonts folder)
+# Copy TTFs into the system Fonts folder
 Copy-Item "$userFontDir\*.ttf" -Destination $systemFontDir -Force
 
-# 4) Use GDI and User32 APIs to load & broadcast the change
-Add-Type -Namespace WinAPI -Name FontUtils -MemberDefinition @"
-    [DllImport("gdi32.dll", EntryPoint="AddFontResourceW", CharSet=CharSet.Unicode)]
+# C) Register fonts in this session & broadcast change
+Add-Type -MemberDefinition @"
+    [DllImport("gdi32.dll", CharSet=CharSet.Unicode)]
     public static extern int AddFontResource(string lpFileName);
-    [DllImport("user32.dll", EntryPoint="SendMessageW")]
+    [DllImport("user32.dll")]
     public static extern int SendMessage(int hWnd, int Msg, int wParam, int lParam);
-"@
+"@ -Name FontReg -Namespace WinAPI
 
-# Load each font into this session
+# Load each new font resource
 Get-ChildItem $userFontDir -Filter *.ttf | ForEach-Object {
-    [WinAPI.FontUtils]::AddFontResource($_.FullName) | Out-Null
+    [WinAPI.FontReg]::AddFontResource($_.FullName) | Out-Null
 }
 
-# Broadcast WM_FONTCHANGE so running apps refresh
-[WinAPI.FontUtils]::SendMessage(0xffff, 0x001D, 0, 0) | Out-Null
+# WM_FONTCHANGE = 0x001D, HWND_BROADCAST = 0xffff
+[WinAPI.FontReg]::SendMessage(0xffff, 0x001D, 0, 0) | Out-Null
 
 Write-Host "   • Hack Nerd Font installed & registered—no reboot needed!"
 
