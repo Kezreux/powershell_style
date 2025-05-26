@@ -26,6 +26,20 @@ function Write-Log {
     Write-Host "[$ts] [$Level] $Message" -ForegroundColor $Color
 }
 
+#-----------------FETCH RELEASE-----------------#
+function Get-LatestNerdFontsRelease {
+    Write-Log "Fetching latest Nerd Fonts release info…" 'INFO'
+    try {
+        $resp = Invoke-RestMethod -Uri 'https://api.github.com/repos/ryanoasis/nerd-fonts/releases/latest' -UseBasicParsing
+        return $resp.tag_name
+    }
+    catch {
+        throw "Could not fetch latest Nerd Fonts release: $_"
+    }
+}
+
+
+
 #-----------------INSTALL CHECK-----------------#
 function Test-OhMyPoshInstalled {
     try {
@@ -47,6 +61,24 @@ function Test-TerminalIconsInstalled {
     catch {
         return $false
     }
+}
+
+function Test-NerdFontInstalled {
+    param(
+        [Parameter(Mandatory)][string]$FontName  # e.g. 'FiraCode Nerd Font'
+    )
+    # Check registry under HKLM 64-bit; falls back to HKCU if needed
+    $regPaths = @(
+        'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts',
+        'HKCU:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts'
+    )
+    foreach ($path in $regPaths) {
+        if (Get-ItemProperty -Path $path -ErrorAction SilentlyContinue |
+            Where-Object { $_.PSObject.Properties.Name -eq "$FontName (TrueType)" }) {
+            return $true
+        }
+    }
+    return $false
 }
 
 #-----------------INSTALLATION METHOD-----------------#
@@ -96,6 +128,68 @@ function Install-TerminalIcons {
     }
 }
 
+function Install-NerdFonts {
+    param(
+        [Parameter(Mandatory)][string[]]$Fonts  # e.g. @('FiraCode', 'Hack')
+    )
+
+    # Ensure elevated
+    if (-not ([bool](New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator))) {
+        throw "Font installation requires elevation. Please run as Administrator."
+    }
+
+    $releaseTag = Get-LatestNerdFontsRelease
+    $tmpDir = Join-Path $env:TEMP "nerd-fonts-$releaseTag"
+    if (Test-Path $tmpDir) { Remove-Item $tmpDir -Recurse -Force }
+    New-Item -Path $tmpDir -ItemType Directory | Out-Null
+
+    foreach ($font in $Fonts) {
+        $fontLabel = "$font Nerd Font"
+        if (Test-NerdFontInstalled -FontName $fontLabel) {
+            Write-Log "‘$fontLabel’ already installed. Skipping." 'INFO'
+            continue
+        }
+
+        $zipName = "$font.zip"
+        $url = "https://github.com/ryanoasis/nerd-fonts/releases/download/$releaseTag/$zipName"
+        $zipPath = Join-Path $tmpDir $zipName
+
+        Write-Log "Downloading $zipName from $releaseTag…" 'INFO'
+        try {
+            Invoke-WebRequest -Uri $url -OutFile $zipPath -UseBasicParsing
+        }
+        catch {
+            Write-Log "Failed to download $zipName: $_" 'ERROR'
+            continue
+        }
+
+        Write-Log "Extracting $zipName…" 'INFO'
+        Expand-Archive -Path $zipPath -DestinationPath $tmpDir
+
+        # Copy all TTF/OTF files to Windows fonts folder
+        $fontFiles = Get-ChildItem -Path $tmpDir -Recurse -Include '*.ttf','*.otf'
+        foreach ($file in $fontFiles) {
+            $destPath = Join-Path "$env:WINDIR\Fonts" $file.Name
+            Write-Log "Installing font file $($file.Name)…" 'INFO'
+            Copy-Item -Path $file.FullName -Destination $destPath -Force
+
+            # Register in registry so Windows recognizes it
+            $regKey = 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts'
+            New-ItemProperty -Path $regKey `
+                             -Name "$fontLabel (TrueType)" `
+                             -Value $file.Name `
+                             -PropertyType String `
+                             -Force | Out-Null
+        }
+
+        Write-Log "Successfully installed ‘$fontLabel’." 'INFO'
+    }
+
+    # Cleanup
+    Remove-Item $tmpDir -Recurse -Force
+    Write-Log "Cleaned up temporary files." 'INFO'
+}
+
 #-----------------MAIN ENTRY-----------------#
 function Ensure-OhMyPosh {
     if (Test-OhMyPoshInstalled) {
@@ -141,6 +235,21 @@ function Ensure-TerminalIcons {
     }
 }
 
+function Ensure-NerdFonts {
+    param(
+        [string[]]$Fonts = @('FiraCode','Hack')  # default set; modify as desired
+    )
+    Write-Log "Ensuring Nerd Fonts: $($Fonts -join ', ')" 'INFO'
+    Install-NerdFonts -Fonts $Fonts
+}
+
+if ($MyInvocation.InvocationName -eq '.\Install-NerdFonts.ps1' -or $MyInvocation.MyCommand.Path) {
+    Ensure-NerdFonts
+}
+
 #-----------------RUN THE INSTALLER-----------------#
 Ensure-OhMyPosh
 Ensure-TerminalIcons
+Ensure-NerdFonts -Fonts @('FiraCode','Hack','Meslo')
+
+
