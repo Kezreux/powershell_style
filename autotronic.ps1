@@ -26,6 +26,37 @@ function Write-Log {
     Write-Host "[$ts] [$Level] $Message" -ForegroundColor $Color
 }
 
+#-----------------HELPERS-----------------#
+
+function Update-RemoteFile {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$Url,
+        [Parameter(Mandatory)][string]$DestinationPath
+    )
+
+    # 1) Backup existing
+    if (Test-Path $DestinationPath) {
+        $backupPath = "$DestinationPath.bak_$(Get-Date -Format 'yyyyMMddHHmmss')"
+        Write-Log "Backing up existing file to $backupPath" 'INFO'
+        Copy-Item -Path $DestinationPath -Destination $backupPath -Force
+    }
+    else {
+        Write-Log "No existing file at $DestinationPath; skipping backup." 'WARN'
+    }
+
+    # 2) Download
+    Write-Log "Downloading from $Url to $DestinationPath" 'INFO'
+    try {
+        Invoke-WebRequest -Uri $Url -OutFile $DestinationPath -UseBasicParsing -ErrorAction Stop
+        Write-Log "Successfully updated $DestinationPath" 'INFO'
+    }
+    catch {
+        Write-Log "Failed to download $Url: $($_.Exception.Message)" 'ERROR'
+        throw "Update-RemoteFile failed for $DestinationPath"
+    }
+}
+
 #-----------------FETCH RELEASE-----------------#
 function Get-LatestNerdFontsRelease {
     Write-Log "Fetching latest Nerd Fonts release info…" 'INFO'
@@ -246,6 +277,18 @@ function Ensure-NerdFonts {
 if ($MyInvocation.InvocationName -eq '.\Install-NerdFonts.ps1' -or $MyInvocation.MyCommand.Path) {
     Ensure-NerdFonts
 }
+
+$github    = 'https://raw.githubusercontent.com/Kezreux/powershell_style/main'
+$themeDir  = "$env:USERPROFILE\Documents\PowerShell\PoshThemes"
+$themeFile = Join-Path $themeDir 'aanestad.omp.json'
+
+if (-not (Test-Path $themeDir)) {
+    Write-Log "Creating theme directory $themeDir" 'INFO'
+    New-Item -Path $themeDir -ItemType Directory | Out-Null
+}
+
+$themeUrl = "$github/PoshThemes/aanestad.omp.json"
+Update-RemoteFile -Url $themeUrl -DestinationPath $themeFile
 
 #-----------------RUN THE INSTALLER-----------------#
 Ensure-OhMyPosh
