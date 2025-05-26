@@ -40,40 +40,26 @@ foreach ($path in $wtTargets) {
 }
 
 #────────────────────────── 3. PowerShell-profile ────────────────────────────
-Write-Host "`n→ Overriding PowerShell profile" -ForegroundColor Cyan
+Write-Host "`n→ Overriding host-specific PowerShell profile" -ForegroundColor Cyan
 
-# 1) All-Hosts profile (loaded by any PS host)
-$allHostsProfile = $PROFILE.CurrentUserAllHosts
-$allHostsDir     = Split-Path $allHostsProfile -Parent
-
-# ensure directory exists
-if (-not (Test-Path $allHostsDir)) {
-    New-Item -ItemType Directory -Path $allHostsDir -Force | Out-Null
-}
-
-# download your main profile
-Remove-Item $allHostsProfile -Force -ErrorAction SilentlyContinue
-Invoke-RestMethod `
-  -Uri  "$github/profile/Microsoft.PowerShell_profile.ps1" `
-  -OutFile $allHostsProfile `
-  -UseBasicParsing
-Write-Host "   • $allHostsProfile overwritten"
-
-# 2) Host-Specific stub (so `notepad $PROFILE` opens something
+# Target the host-specific profile (so that notepad $PROFILE opens this file)
 $hostProfile = $PROFILE.CurrentUserCurrentHost
 $hostDir     = Split-Path $hostProfile -Parent
 
+# 1) Ensure the directory exists
 if (-not (Test-Path $hostDir)) {
-    New-Item -ItemType Directory -Path $hostDir -Force | Out-Null
+    New-Item -Path $hostDir -ItemType Directory -Force | Out-Null
 }
 
-# write a one-line dot-source stub
-@"
-. `"$allHostsProfile`"
-"@ |
-  Out-File -FilePath $hostProfile -Encoding UTF8 -Force
+# 2) Download your GitHub profile into that exact path
+Remove-Item $hostProfile -Force -ErrorAction SilentlyContinue
+Invoke-RestMethod `
+  -Uri  "$github/profile/Microsoft.PowerShell_profile.ps1" `
+  -OutFile $hostProfile `
+  -UseBasicParsing
 
-Write-Host "   • $hostProfile created (dot-sourcing All-Hosts profile)"
+Write-Host "   • $hostProfile overwritten"
+
 
 #────────────────────────── 4. Oh‑My‑Posh‑tema ──────────────────────────────
 Write-Host "`n→ Overriding Oh‑My‑Posh theme" -ForegroundColor Cyan
