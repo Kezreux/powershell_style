@@ -1,8 +1,9 @@
 <#
 .SYNOPSIS
-  Bootstrap‑installer for PowerShell‑oppsett med full override fra GitHub raw URLs:
+  Bootstrap-installer for PowerShell‑oppsett med full override fra GitHub raw URLs:
     • Admin‑sjekk og auto‑elevasjon
     • Overrider Windows‑Terminal settings.json, Oh‑My‑Posh‑tema og PowerShell‑profil (sletter først, laster ned fra GitHub)
+    • Setter POSH_THEMES_PATH automatisk
     • Installerer/oppdaterer PSReadLine, Terminal‑Icons, Oh‑My‑Posh
     • Installerer Hack Nerd Font via winget
 #>
@@ -11,7 +12,7 @@
 param()
 $ErrorActionPreference = 'Stop'
 
-#─────────────────────────── 1. Auto‑elevate ────────────────────────────────
+#────────────────────────── 1. Auto‑elevate ────────────────────────────────
 function Ensure-Admin {
     $p = [Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent())
     if (-not $p.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
@@ -48,12 +49,16 @@ Write-Host "   • $profilePath overwritten"
 #────────────────────────── 4. Oh‑My‑Posh‑tema ──────────────────────────────
 Write-Host "`n→ Overriding Oh‑My‑Posh theme" -ForegroundColor Cyan
 $themeDest = "$HOME\Documents\PowerShell\PoshThemes\aanestad.omp.json"
-if (-not (Test-Path (Split-Path $themeDest -Parent))) {
-    New-Item -ItemType Directory (Split-Path $themeDest -Parent) -Force | Out-Null
-}
+$themeDir  = Split-Path $themeDest -Parent
+if (-not (Test-Path $themeDir)) { New-Item -ItemType Directory $themeDir -Force | Out-Null }
 Remove-Item $themeDest -Force -ErrorAction SilentlyContinue
 Invoke-RestMethod -Uri "$github/theme/aanestad.omp.json" -OutFile $themeDest -UseBasicParsing
 Write-Host "   • $themeDest overwritten"
+
+# Sett miljøvariabel slik at profile-linjen finner temaet
+[Environment]::SetEnvironmentVariable('POSH_THEMES_PATH', $themeDir, 'User')
+$env:POSH_THEMES_PATH = $themeDir
+Write-Host "   • POSH_THEMES_PATH set to $themeDir"
 
 #────────────────────────── 5. PowerShell‑moduler ───────────────────────────
 Write-Host "`n→ Installing/updating PowerShell modules" -ForegroundColor Cyan
