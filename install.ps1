@@ -88,9 +88,27 @@ foreach ($m in $mods) {
 
 #────────────────────────── 6. Hack Nerd Font ───────────────────────────────
 Write-Host "`n→ Installing Hack Nerd Font via winget" -ForegroundColor Cyan
+
 if (Get-Command winget -ErrorAction SilentlyContinue) {
-    winget install --id SourceFoundry.HackFonts -e --silent | Out-Null
-    Write-Host "   • Hack Nerd Font installed"
+    $args = @(
+        'install',
+        '--id', 'SourceFoundry.HackFonts',
+        '-e',  '--silent',
+        '--accept-source-agreements',
+        '--accept-package-agreements'
+    )
+
+    # Launch Winget in-process, wait for it to finish
+    Start-Process -FilePath winget `
+                  -ArgumentList $args `
+                  -NoNewWindow `
+                  -Wait
+
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "   • Hack Nerd Font installed"
+    } else {
+        Write-Warning "   • Winget exited with code $LASTEXITCODE; font may not have been installed."
+    }
 } else {
     Write-Warning "   • winget not found; font skipped"
 }
