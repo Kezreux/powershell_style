@@ -42,7 +42,6 @@ foreach ($path in $wtTargets) {
 #────────────────────────── 3. PowerShell-profile ────────────────────────────
 Write-Host "`n→ Overriding host-specific PowerShell profile" -ForegroundColor Cyan
 
-# Target the host-specific profile (so that notepad $PROFILE opens this file)
 $hostProfile = $PROFILE.CurrentUserCurrentHost
 $hostDir     = Split-Path $hostProfile -Parent
 
@@ -51,14 +50,22 @@ if (-not (Test-Path $hostDir)) {
     New-Item -Path $hostDir -ItemType Directory -Force | Out-Null
 }
 
-# 2) Download your GitHub profile into that exact path
-Remove-Item $hostProfile -Force -ErrorAction SilentlyContinue
-Invoke-RestMethod `
-  -Uri  "$github/profile/Microsoft.PowerShell_profile.ps1" `
-  -OutFile $hostProfile `
-  -UseBasicParsing
+# 2) Download the remote profile into a string
+$remoteUri = "$github/profile/Microsoft.PowerShell_profile.ps1"
+$profileContent = Invoke-RestMethod -Uri $remoteUri -UseBasicParsing -ErrorAction Stop
 
-Write-Host "   • $hostProfile overwritten"
+# 3) Prepend the Import-Module line
+$bootstrap = @'
+# auto-import oh-my-posh so the shim is available
+Import-Module oh-my-posh -ErrorAction SilentlyContinue
+'@
+
+# 4) Write it all out
+($bootstrap + "`n" + $profileContent) |
+  Out-File -FilePath $hostProfile -Encoding UTF8 -Force
+
+Write-Host "   • $hostProfile overwritten (with Import-Module prepended)"
+
 
 
 #────────────────────────── 4. Oh‑My‑Posh‑tema ──────────────────────────────
