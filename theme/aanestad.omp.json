@@ -1,0 +1,80 @@
+{
+  "$schema": "https://raw.githubusercontent.com/JanDeDobbeleer/oh-my-posh/main/themes/schema.json",
+  "blocks": [
+    {
+      "alignment": "left",
+      "segments": [
+        {
+          "type": "session",
+          "style": "plain",
+          "properties": {
+            "display_host": true
+          },
+          "template": "<lightGreen>\u250c\u2500\u2500({{ if .Root }}💀{{ else }}㉿{{ end }}{{ .HostName }})</>"
+        },
+        {
+          "type": "python",
+          "style": "plain",
+          "properties": {
+            "fetch_version": false,
+            "fetch_virtual_env": true
+          },
+          "template": "<green>-[</>\ue235 {{ if .Error }}{{ .Error }}{{ else }}{{ if .Venv }}{{ .Venv }}{{ end }}{{ .Full }}{{ end }}<green>]</>"
+        },
+        {
+          "type": "path",
+          "style": "plain",
+          "foreground": "lightBlue",
+          "properties": {
+            "folder_separator_icon": "<#c0c0c0>/</>",
+            "style": "full"
+          },
+          "template": "<lightBlue>-[</>{{ .Path }}<lightBlue>]</>"
+        },
+        {
+          "type": "git",
+          "style": "plain",
+          "when": "{{ .Git.IsRepo }}",
+          "template": "<green>-[</>{{ .HEAD }}<green>]</>"
+        }
+      ],
+      "type": "prompt"
+    },
+    {
+      "alignment": "right",
+      "segments": [
+        {
+          "type": "executiontime",
+          "style": "plain",
+          "properties": {
+            "always_enabled": true,
+            "style": "round"
+          },
+          "template": " {{ .FormattedMs }} "
+        },
+        {
+          "type": "status",
+          "style": "plain",
+          "properties": {
+            "always_enabled": true
+          },
+          "template": " {{ if gt .Code 0 }}\uea76{{ else }}\uf42e{{ end }} "
+        }
+      ],
+      "type": "prompt"
+    },
+    {
+      "alignment": "left",
+      "newline": true,
+      "segments": [
+        {
+          "type": "text",
+          "style": "plain",
+          "template": "<green>\u2514\u2500</>{{ if .Root }}<lightRed>#</>{{ else }}${{ end }} "
+        }
+      ],
+      "type": "prompt"
+    }
+  ],
+  "version": 3
+}
