@@ -287,7 +287,7 @@ if (-not (Test-Path $themeDir)) {
     New-Item -Path $themeDir -ItemType Directory | Out-Null
 }
 
-$themeUrl = "$github/PoshThemes/aanestad.omp.json"
+$themeUrl = "$github/theme/aanestad.omp.json"
 Update-RemoteFile -Url $themeUrl -DestinationPath $themeFile
 
 #-----------------RUN THE INSTALLER-----------------#
