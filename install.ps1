@@ -79,45 +79,44 @@ foreach($m in 'PSReadLine','Terminal-Icons'){
   }
 }
 
-# 6) Hack Nerd Font
-Write-Host "`n→ Installing Hack Nerd Font" -ForegroundColor Cyan
-if (Get-Command winget -ErrorAction SilentlyContinue){
-  Start-Process winget -ArgumentList @(
-    'install','--id','SourceFoundry.HackFonts','-e','--silent',
-    '--accept-source-agreements','--accept-package-agreements'
-  ) -NoNewWindow -Wait
-  Write-Host "   • Winget code $LASTEXITCODE"
+#────────────────────────── 6. Hack Nerd Font ───────────────────────────────
+Write-Host "`n→ Installing & verifying Hack Nerd Font" -ForegroundColor Cyan
+
+# A) Attempt Winget install
+if (Get-Command winget -ErrorAction SilentlyContinue) {
+    Start-Process winget -ArgumentList @(
+        'install','--id','SourceFoundry.HackFonts','-e','--silent',
+        '--accept-source-agreements','--accept-package-agreements'
+    ) -NoNewWindow -Wait
+    Write-Host "   • winget exit code $LASTEXITCODE"
 } else {
-  Write-Warning "   • winget not found"
+    Write-Warning "   • winget not found; will install manually"
 }
 
-#────────────────────────── 6b. Verify / Fallback for Hack Nerd Font ─────────────────────────────
-Write-Host "`n→ Verifying Hack Nerd Font installation" -ForegroundColor Cyan
+# B) Check if Windows actually knows about “Hack Nerd Font”
+$hasFont = [System.Drawing.FontFamily]::Families |
+           Where-Object Name -Like '*Hack Nerd Font*'
 
-# Look for any installed “Hack Nerd Font” families
-$installed = [System.Drawing.FontFamily]::Families |
-             Where-Object Name -Like '*Hack Nerd Font*'
-
-if ($installed) {
-    Write-Host "   • Hack Nerd Font is present (`($($installed.Name -join ', '))`)"
+if ($hasFont) {
+    Write-Host "   • Hack Nerd Font registered: $($hasFont.Name -join ', ')"
 } else {
-    Write-Warning "   • Hack Nerd Font not found via Winget—installing manually…"
+    Write-Warning "   • Hack Nerd Font still missing—installing manually…"
 
-    # 1) Download the official Hack Nerd Font zip
-    $zipUrl = 'https://github.com/ryanoasis/nerd-fonts/releases/download/v2.3.3/Hack.zip'
-    $zip    = Join-Path $env:TEMP 'HackNerd.zip'
-    Invoke-RestMethod -Uri $zipUrl -OutFile $zip -UseBasicParsing
+    # Download the zip from upstream GitHub
+    $zipUrl   = 'https://github.com/ryanoasis/nerd-fonts/releases/download/v2.3.3/Hack.zip'
+    $zipFile  = Join-Path $env:TEMP 'HackNerd.zip'
+    Invoke-RestMethod -Uri $zipUrl -OutFile $zipFile -UseBasicParsing
 
-    # 2) Expand into your local font folder
-    $userFonts = Join-Path $env:LOCALAPPDATA 'Microsoft\Windows\Fonts'
-    if (-not (Test-Path $userFonts)) { New-Item -ItemType Directory -Path $userFonts -Force | Out-Null }
-    Expand-Archive -Path $zip -DestinationPath $userFonts -Force
+    # Extract to per-user Fonts
+    $userFontDir = Join-Path $env:LOCALAPPDATA 'Microsoft\Windows\Fonts'
+    if (-not (Test-Path $userFontDir)) { New-Item -ItemType Directory -Path $userFontDir -Force | Out-Null }
+    Expand-Archive -Path $zipFile -DestinationPath $userFontDir -Force
 
-    # 3) Also copy to the system Fonts folder (requires admin)
-    $sysFonts = Join-Path $env:WINDIR 'Fonts'
-    Copy-Item "$userFonts\*.ttf" -Destination $sysFonts -Force
+    # Copy into system Fonts (requires admin)
+    $systemFontDir = "$env:WINDIR\Fonts"
+    Copy-Item "$userFontDir\*.ttf" -Destination $systemFontDir -Force
 
-    Write-Host "   • Hack Nerd Font manually installed to user+system fonts. Please reboot."
+    Write-Host "   • Hack Nerd Font files copied to user+system Fonts"
 }
 
 
