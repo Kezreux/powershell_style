@@ -26,13 +26,22 @@ function Write-Log {
     Write-Host "[$ts] [$Level] $Message" -ForegroundColor $Color
 }
 
-
-
 #-----------------INSTALL CHECK-----------------#
 function Test-OhMyPoshInstalled {
     try {
         # oh-my-posh v3+ ships as an executable
         Get-Command 'oh-my-posh' -ErrorAction Stop | Out-Null
+        return $true
+    }
+    catch {
+        return $false
+    }
+}
+
+function Test-TerminalIconsInstalled {
+    try {
+        # The module ships a command named Get-FileIcon
+        Get-Command -Name Get-FileIcon -ErrorAction Stop | Out-Null
         return $true
     }
     catch {
@@ -71,6 +80,22 @@ function Install-WithPSGallery {
     }
 }
 
+function Install-TerminalIcons {
+    Write-Log "Attempting install of Terminal-Icons module from PSGallery…" 'INFO'
+    try {
+        if (-not (Get-Module -ListAvailable -Name 'Terminal-Icons')) {
+            Install-Module -Name 'Terminal-Icons' -Scope CurrentUser -Force -AllowClobber
+        }
+        Import-Module 'Terminal-Icons' -ErrorAction Stop
+        Write-Log "Terminal-Icons installation succeeded." 'INFO'
+        return $true
+    }
+    catch {
+        Write-Log "Failed to install Terminal-Icons: $_" 'ERROR'
+        return $false
+    }
+}
+
 #-----------------MAIN ENTRY-----------------#
 function Ensure-OhMyPosh {
     if (Test-OhMyPoshInstalled) {
@@ -100,5 +125,22 @@ function Ensure-OhMyPosh {
     throw "Failed to install Oh My Posh via both winget and PSGallery."
 }
 
+function Ensure-TerminalIcons {
+    if (Test-TerminalIconsInstalled) {
+        Write-Log "Terminal-Icons is already installed. Skipping." 'INFO'
+        return
+    }
+
+    Write-Log "Terminal-Icons not found. Installing…" 'INFO'
+
+    if (Install-TerminalIcons) {
+        Write-Log "Terminal-Icons is now installed and imported." 'INFO'
+    }
+    else {
+        throw "Unable to install Terminal-Icons module."
+    }
+}
+
 #-----------------RUN THE INSTALLER-----------------#
 Ensure-OhMyPosh
+Ensure-TerminalIcons
