@@ -93,6 +93,53 @@ if (Test-Path $settingsFile) {
     Remove-Item $settingsFile -Force
 }
 
+function Remove-OhMyPosh {
+    Write-Log "Uninstalling Oh My Posh…" 'INFO'
+
+    # 1) PSGallery
+    if (Get-InstalledModule oh-my-posh -ErrorAction SilentlyContinue) {
+        Write-Log "→ Found PSGallery module; uninstalling…" 'INFO'
+        Uninstall-Module -Name oh-my-posh -AllVersions -Force -ErrorAction SilentlyContinue
+        Write-Log "   PSGallery module removed." 'INFO'
+    }
+
+    # 2) Winget
+    $wingetPkg = winget list --source winget | Where-Object { $_.Id -eq 'JanDeDobbeleer.OhMyPosh' -or $_.Name -match 'Oh My Posh' }
+    if ($wingetPkg) {
+        Write-Log "→ Found winget package $($wingetPkg.Id); uninstalling…" 'INFO'
+        winget uninstall --id $wingetPkg.Id -e --accept-package-agreements --accept-source-agreements -h | Out-Null
+        Write-Log "   Winget package removed." 'INFO'
+    }
+
+    # 3) Standalone executable directory
+    $cmd = Get-Command oh-my-posh -ErrorAction SilentlyContinue
+    if ($cmd) {
+        $exePath    = $cmd.Source
+        $installDir = Split-Path $exePath -Parent -Parent  # two levels up: bin\..
+        Write-Log "→ Found standalone install at $installDir; deleting entire folder…" 'INFO'
+        try {
+            Remove-Item $installDir -Recurse -Force -ErrorAction Stop
+            Write-Log "   Deleted $installDir." 'INFO'
+        }
+        catch {
+            Write-Log "   Failed to remove standalone folder: $($_.Exception.Message)" 'WARN'
+        }
+    }
+
+    # 4) Leftover user Modules folder
+    $modDir = Join-Path $env:USERPROFILE 'Documents\PowerShell\Modules\oh-my-posh'
+    if (Test-Path $modDir) {
+        Write-Log "→ Removing leftover module folder $modDir" 'INFO'
+        Remove-Item $modDir -Recurse -Force -ErrorAction SilentlyContinue
+    }
+
+    Write-Log "Oh My Posh uninstall complete." 'INFO'
+}
+
+# Invoke it:
+Remove-OhMyPosh
+
+
 # ─────────────────────────────────────────────────────────────
 # 7) Final cleanup
 # ─────────────────────────────────────────────────────────────
