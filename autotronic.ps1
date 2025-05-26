@@ -241,6 +241,40 @@ function Ensure-OhMyPosh {
         Write-Log "winget not available on this system." 'WARN'
     }
 
+        if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
+        throw "winget not found. Please install the App Installer from the Microsoft Store."
+    }
+
+    Write-Log "Installing Oh My Posh via winget…" 'INFO'
+    try {
+        winget install --id JanDeDobbeleer.OhMyPosh -e --accept-package-agreements --accept-source-agreements -h
+        Write-Log "Oh My Posh successfully installed via winget." 'INFO'
+    }
+    catch {
+        throw "winget failed to install Oh My Posh: $($_.Exception.Message)"
+    }
+
+    if (Get-Command 'oh-my-posh' -ErrorAction SilentlyContinue) {
+    Import-Module oh-my-posh -ErrorAction SilentlyContinue
+
+    if ($Env:POSH_THEMES_PATH) {
+        $theme = Join-Path $Env:POSH_THEMES_PATH 'aanestad.omp.json'
+        if (Test-Path $theme) {
+            Set-PoshPrompt -Theme $theme
+        }
+        else {
+            Write-Host "⚠ Theme file not found at $theme" -ForegroundColor Yellow
+        }
+    }
+    else {
+        Write-Host "⚠ POSH_THEMES_PATH not set; Oh My Posh theme not applied." -ForegroundColor Yellow
+    }
+}
+else {
+    Write-Host "⚠ oh-my-posh.exe not found; using default prompt." -ForegroundColor Yellow
+}
+}
+
     # Fallback to PowerShell Gallery
     if (Install-WithPSGallery) {
         Write-Log "Oh My Posh installation complete via PSGallery." 'INFO'

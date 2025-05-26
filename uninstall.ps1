@@ -136,6 +136,13 @@ function Remove-OhMyPosh {
     Write-Log "Oh My Posh uninstall complete." 'INFO'
 }
 
+$installDir = Join-Path $env:LOCALAPPDATA 'Programs\oh-my-posh'
+if (Test-Path $installDir) {
+    Write-Log "→ Deleting standalone install at $installDir" 'INFO'
+    Remove-Item $installDir -Recurse -Force -ErrorAction SilentlyContinue
+    Write-Log "   Deleted $installDir." 'INFO'
+}
+
 # Invoke it:
 Remove-OhMyPosh
 
