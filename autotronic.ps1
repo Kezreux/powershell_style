@@ -306,6 +306,22 @@ Update-RemoteFile `
 
 Write-Log "Replaced default profile with custom profile at:`n  $targetProfile" 'INFO'
 
+$remoteSettings = "$github/terminal/settings.json"
+
+$settingsDir  = Join-Path $env:LOCALAPPDATA 'Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState'
+$localSettings = Join-Path $settingsDir 'settings.json'
+
+if (-not (Test-Path $settingsDir)) {
+    Write-Log "Terminal settings directory not found; creating: $settingsDir" 'INFO'
+    New-Item -Path $settingsDir -ItemType Directory | Out-Null
+}
+
+Update-RemoteFile `
+    -Url $remoteSettings `
+    -DestinationPath $localSettings
+
+Write-Log "Windows Terminal settings.json updated at:`n  $localSettings" 'INFO'
+
 #-----------------RUN THE INSTALLER-----------------#
 Ensure-OhMyPosh
 Ensure-TerminalIcons
