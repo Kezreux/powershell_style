@@ -15,9 +15,9 @@ $ErrorActionPreference = 'Stop'
 # ── CONFIG ──────────────────────────────────────────────────────────────────────
 $githubRawBase = 'https://raw.githubusercontent.com/Kezreux/powershell_style/main'
 $fileMap = @{  
-    "$githubRawBase/config/settings.json"  = "$env:USERPROFILE\.config\myapp\settings.json"
+    "$githubRawBase/terminal/settings.json"  = "$env:USERPROFILE\.config\myapp\settings.json"
     "$githubRawBase/theme/aanestad.omp.json"    = "$env:USERPROFILE\.config\oh-my-posh\themes.json"
-    "$githubRawBase/profile/profile.ps1"   = $PROFILE.CurrentUserAllHosts
+    "$githubRawBase/profile/Microsoft.PowerShell_profile.ps1"   = $PROFILE.CurrentUserAllHosts
     "$githubRawBase/terminal/settings.json" = Join-Path $env:LOCALAPPDATA 'Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json'
 }
 $modules = 'PSReadLine','Terminal-Icons','oh-my-posh'
