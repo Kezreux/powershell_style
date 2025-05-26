@@ -87,34 +87,30 @@ function Install-NerdFont {
 }
 
 function Copy-Themes-And-Profile {
-    # Kopier .ps1-profiler, skip hvis allerede eksisterer
-    $profileDir = Split-Path -Parent $PROFILE
+    # Ensure profile folder exists
+    $profileDir = Split-Path -Parent $PROFILE.CurrentUserAllHosts
     if (-not (Test-Path $profileDir)) {
-        New-Item -ItemType Directory -Path $profileDir | Out-Null
-    }
-    Get-ChildItem -Path (Join-Path $ScriptDir 'profile') -Filter '*.ps1' | ForEach-Object {
-        $dest = Join-Path $profileDir $_.Name
-        if (Test-Path $dest) {
-            Write-Host "Skipping existing profile: $($_.Name)" -ForegroundColor Yellow
-        } else {
-            Copy-Item -Path $_.FullName -Destination $dest
-            Write-Host "✔ Copied profile: $($_.Name)" -ForegroundColor Green
-        }
+        New-Item -ItemType Directory -Path $profileDir -Force | Out-Null
     }
 
-    # Kopier .omp.json-temaer, skip hvis allerede eksisterer
+    # Copy (and overwrite) all .ps1 profile scripts
+    Get-ChildItem -Path (Join-Path $ScriptDir 'profile') -Filter '*.ps1' | ForEach-Object {
+        $dest = Join-Path $profileDir $_.Name
+        Copy-Item -Path $_.FullName -Destination $dest -Force
+        Write-Host "✔ Copied/Overwrote profile: $($_.Name)" -ForegroundColor Green
+    }
+
+    # Ensure theme folder exists
     $themeDest = Join-Path $env:USERPROFILE 'Documents\PowerShell\PoshThemes'
     if (-not (Test-Path $themeDest)) {
-        New-Item -ItemType Directory -Path $themeDest | Out-Null
+        New-Item -ItemType Directory -Path $themeDest -Force | Out-Null
     }
+
+    # Copy (and overwrite) all .omp.json themes
     Get-ChildItem -Path (Join-Path $ScriptDir 'theme') -Filter '*.omp.json' | ForEach-Object {
         $destTheme = Join-Path $themeDest $_.Name
-        if (Test-Path $destTheme) {
-            Write-Host "Skipping existing theme: $($_.Name)" -ForegroundColor Yellow
-        } else {
-            Copy-Item -Path $_.FullName -Destination $destTheme
-            Write-Host "✔ Copied theme: $($_.Name)" -ForegroundColor Green
-        }
+        Copy-Item -Path $_.FullName -Destination $destTheme -Force
+        Write-Host "✔ Copied/Overwrote theme: $($_.Name)" -ForegroundColor Green
     }
 }
 
@@ -125,21 +121,20 @@ function Copy-TerminalSettings {
         return
     }
 
-    $wtPath1 = Join-Path $env:LOCALAPPDATA 'Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState'
-    $wtPath2 = Join-Path $env:LOCALAPPDATA 'Microsoft\Windows Terminal'
+    $wtPaths = @(
+      Join-Path $env:LOCALAPPDATA 'Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState',
+      Join-Path $env:LOCALAPPDATA 'Microsoft\Windows Terminal'
+    )
 
-    foreach ($wtPath in @($wtPath1, $wtPath2)) {
+    foreach ($wtPath in $wtPaths) {
         if (Test-Path $wtPath) {
             $destFile = Join-Path $wtPath 'settings.json'
-            if (Test-Path $destFile) {
-                Write-Host "Skipping existing Terminal settings in $wtPath" -ForegroundColor Yellow
-            } else {
-                Copy-Item -Path $src -Destination $destFile
-                Write-Host "✔ Terminal settings.json copied to $wtPath" -ForegroundColor Green
-            }
+            Copy-Item -Path $src -Destination $destFile -Force
+            Write-Host "✔ Copied/Overwrote Terminal settings.json in $wtPath" -ForegroundColor Green
         }
     }
 }
+
 
 ### === Hovedflyt === ###
 Ensure-Admin
