@@ -10,19 +10,22 @@ function Write-Log {
         [ConsoleColor]$Color
     )
 
-    # Determine timestamp and level color default
-    $timestamp = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
+    # Timestamp
+    $ts = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
+
+    # If no explicit color, pick one by level
     if (-not $PSBoundParameters.ContainsKey('Color')) {
         switch ($Level) {
             'ERROR' { $Color = 'Red'    }
             'WARN'  { $Color = 'Yellow' }
-            default { $Color = 'White'  }
+            default { $Color = 'Green'  }
         }
     }
 
-    # Write to host with color
-    Write-Host "[$timestamp] [$Level] $Message" -ForegroundColor $Color
+    # Emit with color
+    Write-Host "[$ts] [$Level] $Message" -ForegroundColor $Color
 }
+
 
 
 #-----------------INSTALL CHECK-----------------#
