@@ -2,9 +2,8 @@
 .SYNOPSIS
   Bootstrap-installer for PowerShell-oppsett med full override fra GitHub raw URLs:
     - Admin-sjekk
-    - Overrider PowerShell-profile, Oh-My-Posh-tema, og Windows Terminal settings.json
-      med Remove-Item før nedlasting for å sikre rename/override
-    - Installerer PSReadLine, Terminal-Icons, Oh My Posh
+    - Overrider Windows Terminal settings.json, Oh‑My‑Posh‑tema og PowerShell‑profil
+    - Installerer/oppdaterer PSReadLine, Terminal‑Icons, Oh‑My‑Posh
     - Installerer Hack Nerd Font via winget
 #>
 
@@ -12,74 +11,80 @@
 param()
 $ErrorActionPreference = 'Stop'
 
-# ===== Auto-elevate =====
+#───────────────────────────────────────────────────────────────────────────────
+# 1. Auto‑elevate
+#───────────────────────────────────────────────────────────────────────────────
 function Ensure-Admin {
-    $current = [Security.Principal.WindowsPrincipal]::new(
-        [Security.Principal.WindowsIdentity]::GetCurrent()
-    )
-    if (-not $current.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-        Write-Host "→ Restarting as administrator…" -ForegroundColor Yellow
+    $principal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
+    if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+        Write-Host "→ Restarting as administrator …" -ForegroundColor Yellow
         Start-Process pwsh "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs
         exit
     }
 }
 Ensure-Admin
 
-# Base URL
+#───────────────────────────────────────────────────────────────────────────────
+# 2. File overrides
+#───────────────────────────────────────────────────────────────────────────────
 $githubRawBase = 'https://raw.githubusercontent.com/Kezreux/powershell_style/main'
 
-Write-Host "`n→ Overriding Windows Terminal settings.json…" -ForegroundColor Cyan
+# (a) Windows Terminal settings.json (two possible locations)
+Write-Host "`n→ Overriding Windows Terminal settings.json" -ForegroundColor Cyan
 $wtTargets = @(
     Join-Path $env:LOCALAPPDATA 'Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json',
     Join-Path $env:LOCALAPPDATA 'Microsoft\Windows Terminal\settings.json'
 )
 foreach ($wtPath in $wtTargets) {
-    $dir = Split-Path $wtPath -Parent
-    if (Test-Path $dir) {
-        # Remove existing to guarantee overwrite
+    if (Test-Path (Split-Path $wtPath -Parent)) {
         Remove-Item $wtPath -Force -ErrorAction SilentlyContinue
         Invoke-RestMethod -Uri "$githubRawBase/terminal/settings.json" -OutFile $wtPath -UseBasicParsing
-        Write-Host "   • Overwrote Terminal settings at $wtPath"
+        Write-Host "   • $wtPath overwritten"
     }
 }
 
-Write-Host "`n→ Overriding PowerShell profile…" -ForegroundColor Cyan
+# (b) PowerShell profile
+Write-Host "`n→ Overriding PowerShell profile" -ForegroundColor Cyan
 $profileDest = $PROFILE.CurrentUserAllHosts
 Remove-Item $profileDest -Force -ErrorAction SilentlyContinue
-Invoke-RestMethod -Uri "$githubRawBase/profile/Microsoft.PowerShell_profile.ps1" `
-    -OutFile $profileDest -UseBasicParsing
-Write-Host "   • Overwrote profile at $profileDest"
+Invoke-RestMethod -Uri "$githubRawBase/profile/Microsoft.PowerShell_profile.ps1" -OutFile $profileDest -UseBasicParsing
+Write-Host "   • $profileDest overwritten"
 
-Write-Host "`n→ Overriding Oh-My-Posh theme…" -ForegroundColor Cyan
-$themeUri = "$githubRawBase/theme/aanestad.omp.json"
-if ($env:POSH_THEMES_PATH) {
-    $themeDest = Join-Path $env:POSH_THEMES_PATH 'aanestad.omp.json'
-} else {
-    $ompModule = Get-Module -ListAvailable oh-my-posh | Sort-Object Version -Descending | Select-Object -First 1
-    $themeDest = Join-Path $ompModule.ModuleBase 'themes\aanestad.omp.json'
-}
+# (c) Oh‑My‑Posh theme (use standard user theme folder)
+Write-Host "`n→ Overriding Oh‑My‑Posh theme" -ForegroundColor Cyan
+$themeUri  = "$githubRawBase/theme/aanestad.omp.json"
+$themeDest = Join-Path $env:USERPROFILE 'Documents\PowerShell\PoshThemes\aanestad.omp.json'
+$themeDir  = Split-Path $themeDest -Parent
+if (-not (Test-Path $themeDir)) { New-Item -Path $themeDir -ItemType Directory -Force | Out-Null }
 Remove-Item $themeDest -Force -ErrorAction SilentlyContinue
 Invoke-RestMethod -Uri $themeUri -OutFile $themeDest -UseBasicParsing
-Write-Host "   • Overwrote theme at $themeDest"
+Write-Host "   • $themeDest overwritten"
 
-Write-Host "`n→ Installerer/updater moduler…" -ForegroundColor Cyan
+#───────────────────────────────────────────────────────────────────────────────
+# 3. PowerShell modules
+#───────────────────────────────────────────────────────────────────────────────
+Write-Host "`n→ Installing/updating PowerShell modules" -ForegroundColor Cyan
+$modules = 'PSReadLine','Terminal-Icons','oh-my-posh'
 Set-PSRepository -Name PSGallery -InstallationPolicy Trusted -ErrorAction SilentlyContinue
-foreach ($mod in 'PSReadLine','Terminal-Icons','oh-my-posh') {
-    if (Get-InstalledModule -Name $mod -ErrorAction SilentlyContinue) {
-        Update-Module $mod -Force
-        Write-Host "   • Oppdaterte $mod"
+foreach ($m in $modules) {
+    if (Get-InstalledModule -Name $m -ErrorAction SilentlyContinue) {
+        Update-Module $m -Force
+        Write-Host "   • Updated $m"
     } else {
-        Install-Module  $mod -Scope CurrentUser -Force
-        Write-Host "   • Installerte $mod"
+        Install-Module $m -Scope CurrentUser -Force
+        Write-Host "   • Installed $m"
     }
 }
 
-Write-Host "`n→ Installerer Hack Nerd Font via winget…" -ForegroundColor Cyan
+#───────────────────────────────────────────────────────────────────────────────
+# 4. Hack Nerd Font via winget
+#───────────────────────────────────────────────────────────────────────────────
+Write-Host "`n→ Installing Hack Nerd Font" -ForegroundColor Cyan
 if (Get-Command winget -ErrorAction SilentlyContinue) {
     winget install --id SourceFoundry.HackFonts -e --silent | Out-Null
-    Write-Host "   • Installert Hack Nerd Font"
+    Write-Host "   • Hack Nerd Font installed"
 } else {
-    Write-Warning "   • winget ikke funnet; hoppet over fontinstallasjon."
+    Write-Warning "   • winget not found; font skipped"
 }
 
-Write-Host "`n✅ Ferdig! Restart terminalen for å se endringene." -ForegroundColor Green
+Write-Host "`n✅ All done! Restart the terminal to see the changes." -ForegroundColor Green
