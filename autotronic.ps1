@@ -256,14 +256,12 @@ function Ensure-OhMyPosh {
         }
 
         # 5) Now verify the exe is actually discoverable
-        if (Get-Command oh-my-posh -ErrorAction SilentlyContinue) {
-            Write-Log "oh-my-posh.exe found on PATH. Install successful." 'INFO'
-            return
-        }
-        else {
-            Write-Log "oh-my-posh.exe still not on PATH after PATH refresh." 'WARN'
-            Write-Log "You may need to fully restart your shell or log off/on." 'WARN'
-            return
+        if (
+        (Test-Path $winApps) -and
+        (-not ($Env:Path.Split(';') -contains $winApps))
+        ) {
+        Write-Log "Adding WindowsApps ($winApps) to current session PATH" 'INFO'
+        $Env:Path = "$winApps;$Env:Path"
         }
     }
 
@@ -276,9 +274,6 @@ function Ensure-OhMyPosh {
 
     throw "Failed to install Oh My Posh via winget or PSGallery."
 }
-
-
-
 
 function Ensure-TerminalIcons {
     if (Test-TerminalIconsInstalled) {
