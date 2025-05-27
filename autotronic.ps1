@@ -223,60 +223,69 @@ function Install-NerdFonts {
 
 #-----------------MAIN ENTRY-----------------#
 function Ensure-OhMyPosh {
-    # 1) If the exe is already on PATH, we’re done
-    if (Get-Command oh-my-posh -ErrorAction SilentlyContinue) {
-        Write-Log "oh-my-posh.exe already on PATH. Skipping install." 'INFO'
-        return
+    [CmdletBinding()]
+    param()
+
+    Write-Log "=== Ensuring Oh My Posh v5+ ===" 'INFO'
+
+    # 1) Remove old module cache (migration step)
+    if ($Env:POSH_PATH -and (Test-Path $Env:POSH_PATH)) {
+        Write-Log "Removing old cached binary at $Env:POSH_PATH" 'INFO'
+        Remove-Item $Env:POSH_PATH -Recurse -Force -ErrorAction SilentlyContinue
     }
 
-    # 2) Make sure winget exists
+    # 2) Uninstall the deprecated PowerShell module
+    if (Get-InstalledModule -Name oh-my-posh -ErrorAction SilentlyContinue) {
+        Write-Log "Uninstalling deprecated module oh-my-posh" 'INFO'
+        Uninstall-Module -Name oh-my-posh -AllVersions -Force -ErrorAction SilentlyContinue
+    }
+
+    # 3) Make sure winget is available
     if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
-        throw "winget not found. Please install the 'App Installer' from the Microsoft Store."
+        throw "winget not found; please install the 'App Installer' from the Microsoft Store."
     }
 
-    Write-Log "Installing / upgrading Oh My Posh via winget…" 'INFO'
-    $wingetOutput = winget install JanDeDobbeleer.OhMyPosh -s winget
-    $code = $LASTEXITCODE
+    Write-Log "Installing (or upgrading) oh-my-posh via winget…" 'INFO'
+    $wingetOutput = & winget install --id JanDeDobbeleer.OhMyPosh -e `
+        --accept-package-agreements --accept-source-agreements -h 2>&1
+    $exitCode     = $LASTEXITCODE
 
-    Write-Log "Winget exit code: $code" 'INFO'
+    Write-Log "Winget exit code: $exitCode" 'INFO'
     Write-Log "Winget output:`n$wingetOutput" 'INFO'
 
-    # 3) Treat both '0' and 'already latest' as success
+    # 4) Treat zero *or* "no newer versions" as success
     if (
-        $code -eq 0 -or
-        $wingetOutput -match 'No newer package versions are available'
+        $exitCode -eq 0 -or
+        ($wingetOutput -match 'No newer package versions are available')
     ) {
-        Write-Log "Winget reports Oh My Posh at latest version." 'INFO'
+        Write-Log "Winget reports oh-my-posh is at the latest version." 'INFO'
 
-        # 4) Immediately refresh PATH for WindowsApps
-        $winApps = "$env:LOCALAPPDATA\Microsoft\WindowsApps"
+        # 5) Refresh the current session's PATH to include WindowsApps
+        $winApps = "$Env:LOCALAPPDATA\Microsoft\WindowsApps"
         if (
-        (Test-Path $winApps) -and
-        (-not ($env:Path.Split(';') -contains $winApps))
+            (Test-Path $winApps) -and
+            (-not ($Env:Path.Split(';') -contains $winApps))
         ) {
-        Write-Log "Adding WindowsApps ($winApps) to current session PATH" 'INFO'
-        $env:Path = "$winApps;$env:Path"
+            Write-Log "Adding $winApps to this session's PATH" 'INFO'
+            $Env:Path = "$winApps;$Env:Path"
         }
 
-        # 5) Now verify the exe is actually discoverable
-        if (
-        (Test-Path $winApps) -and
-        (-not ($Env:Path.Split(';') -contains $winApps))
-        ) {
-        Write-Log "Adding WindowsApps ($winApps) to current session PATH" 'INFO'
-        $Env:Path = "$winApps;$Env:Path"
+        # 6) Verify the binary is now discoverable
+        if (Get-Command oh-my-posh -ErrorAction SilentlyContinue) {
+            Write-Log "oh-my-posh.exe is on PATH. Install complete." 'INFO'
+            return
+        }
+        else {
+            Write-Log "Warning: oh-my-posh.exe still not found after PATH update." 'WARN'
+            Write-Log "Please restart your shell or log off/on." 'WARN'
+            return
         }
     }
 
-    # 6) If we get here, winget truly failed us—fall back to the PSGallery module
-    Write-Log "Winget install failed fatally; falling back to PSGallery module…" 'WARN'
-    if (Install-WithPSGallery) {
-        Write-Log "oh-my-posh module installed via PSGallery (no standalone exe)." 'INFO'
-        return
-    }
-
-    throw "Failed to install Oh My Posh via winget or PSGallery."
+    # 7) If we reach here, winget truly failed
+    throw "winget failed to install or upgrade oh-my-posh; aborting."
 }
+
 
 function Ensure-TerminalIcons {
     if (Test-TerminalIconsInstalled) {
