@@ -96,57 +96,61 @@ if (Test-Path $settingsFile) {
 function Remove-OhMyPosh {
     Write-Log "=== Removing Oh My Posh ===" 'INFO'
 
-    # 1) Winget uninstall (catches msstore & community source)
-    Write-Log "Attempting winget uninstall of JanDeDobbeleer.OhMyPosh…" 'INFO'
+    # 1) Winget uninstall
+    Write-Log "→ winget uninstall JanDeDobbeleer.OhMyPosh" 'INFO'
     try {
-        & winget uninstall --id JanDeDobbeleer.OhMyPosh -e `
+        winget uninstall --id JanDeDobbeleer.OhMyPosh -e `
             --accept-package-agreements --accept-source-agreements -h 2>&1 | Out-Null
-        Write-Log "  winget uninstall complete (if it was installed)." 'INFO'
-    }
-    catch {
-        Write-Log "  winget uninstall failed or not present: $($_.Exception.Message)" 'WARN'
-    }
-
-    # 2) Remove any Appx/MSIX if it still lingers
-    Write-Log "Checking for Appx/MSIX package…" 'INFO'
-    $appx = Get-AppxPackage -Name "*oh-my-posh*" -ErrorAction SilentlyContinue
-    if ($appx) {
-        Write-Log "  Found Appx package $($appx.PackageFullName); removing…" 'INFO'
-        Remove-AppxPackage -Package $appx.PackageFullName -ErrorAction SilentlyContinue
-        Write-Log "  Appx package removed." 'INFO'
-    }
-    else {
-        Write-Log "  No Appx/MSIX package found." 'INFO'
+        Write-Log "   winget uninstall attempted." 'INFO'
+    } catch {
+        Write-Log "   winget uninstall failed: $($_.Exception.Message)" 'WARN'
     }
 
-    # 3) Remove any shims in WindowsApps
+    # 2) PSGallery module uninstall
+    if (Get-InstalledModule -Name oh-my-posh -ErrorAction SilentlyContinue) {
+        Write-Log "→ Uninstalling PowerShell module oh-my-posh" 'INFO'
+        Uninstall-Module -Name oh-my-posh -AllVersions -Force -ErrorAction SilentlyContinue
+    }
+
+    # 3) Remove any stub/shim in WindowsApps
     $winApps = Join-Path $env:LOCALAPPDATA 'Microsoft\WindowsApps'
-    Write-Log "Cleaning up any oh-my-posh shims in $winApps…" 'INFO'
+    Write-Log "→ Deleting any oh-my-posh* in $winApps" 'INFO'
     Get-ChildItem $winApps -Filter "oh-my-posh*" -Force -ErrorAction SilentlyContinue |
         ForEach-Object {
-            Write-Log "  Deleting shim $($_.FullName)" 'INFO'
+            Write-Log "   Removing shim $($_.Name)" 'INFO'
             Remove-Item $_.FullName -Force -ErrorAction SilentlyContinue
         }
 
-    # 4) Remove any standalone install folder (e.g. if you used manual MSI fallback)
-    $installDir = Join-Path $env:LOCALAPPDATA 'Programs\oh-my-posh'
-    if (Test-Path $installDir) {
-        Write-Log "Removing leftover folder $installDir…" 'INFO'
-        Remove-Item $installDir -Recurse -Force -ErrorAction SilentlyContinue
+    # 4) Remove any oh-my-posh.exe found by Get-Command
+    $cmd = Get-Command oh-my-posh -ErrorAction SilentlyContinue
+    if ($cmd) {
+        $exePath = $cmd.Source
+        Write-Log "→ Found leftover executable at $exePath; deleting" 'INFO'
+        Remove-Item $exePath -Force -ErrorAction SilentlyContinue
     }
 
-    # 5) Remove any modules under user profile
+    # 5) Sweep any other copies under LOCALAPPDATA\Programs
+    $programs = Join-Path $env:LOCALAPPDATA 'Programs'
+    Write-Log "→ Searching $programs for oh-my-posh.exe" 'INFO'
+    Get-ChildItem $programs -Recurse -Filter 'oh-my-posh.exe' -ErrorAction SilentlyContinue |
+        ForEach-Object {
+            Write-Log "   Deleting $_.FullName" 'INFO'
+            Remove-Item $_.FullName -Force -ErrorAction SilentlyContinue
+        }
+
+    # 6) Clean up user module folder
     $modDir = Join-Path $env:USERPROFILE 'Documents\PowerShell\Modules\oh-my-posh'
     if (Test-Path $modDir) {
-        Write-Log "Removing PSModule folder $modDir…" 'INFO'
+        Write-Log "→ Removing PSModule folder $modDir" 'INFO'
         Remove-Item $modDir -Recurse -Force -ErrorAction SilentlyContinue
     }
 
     Write-Log "Oh My Posh teardown complete." 'INFO'
 }
 
-# Invoke it:
+# Invoke it
 Remove-OhMyPosh
+
 
 
 # ─────────────────────────────────────────────────────────────
