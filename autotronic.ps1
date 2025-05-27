@@ -382,8 +382,10 @@ function Ensure-WindowsTerminalSettings {
 Ensure-OhMyPosh
 Ensure-TerminalIcons
 Ensure-NerdFonts -Fonts @('FiraCode','Hack','Meslo')
-Ensure-PoshTheme
-Ensure-PowerShellProfile
-Ensure-WindowsTerminalSettings
+Ensure-PoshTheme -GithubRoot $github -ThemeName 'aanestad.omp.json'
+Ensure-PowerShellProfile -GithubRoot $github -ProfileName 'profile.ps1'
+Ensure-WindowsTerminalSettings -GithubRoot $github -SettingsName 'settings.json'
+
+Write-Log "Installation complete! Please restart your terminal." 'INFO'
 
 
