@@ -250,9 +250,12 @@ function Ensure-OhMyPosh {
 
         # 4) Immediately refresh PATH for WindowsApps
         $winApps = "$env:LOCALAPPDATA\Microsoft\WindowsApps"
-        if (Test-Path $winApps -and -not ($env:Path.Split(';') -contains $winApps)) {
-            Write-Log "Adding WindowsApps ($winApps) to current session PATH" 'INFO'
-            $env:Path = "$winApps;$env:Path"
+        if (
+        (Test-Path $winApps) -and
+        (-not ($env:Path.Split(';') -contains $winApps))
+        ) {
+        Write-Log "Adding WindowsApps ($winApps) to current session PATH" 'INFO'
+        $env:Path = "$winApps;$env:Path"
         }
 
         # 5) Now verify the exe is actually discoverable
