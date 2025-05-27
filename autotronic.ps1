@@ -6,7 +6,7 @@ function Write-Log {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)][string]$Message,
-        [ValidateSet('INFO','WARN','ERROR')][string]$Level = 'INFO',
+        [ValidateSet('INFO','WARN','ERROR', 'DEBUG')][string]$Level = 'INFO',
         [ConsoleColor]$Color
     )
 
