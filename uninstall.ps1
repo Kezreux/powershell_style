@@ -1,161 +1,187 @@
 <#
 .SYNOPSIS
-  Uninstalls all components installed by autotronic.ps1:
-  - Oh My Posh
-  - Terminal-Icons
-  - Nerd Fonts (FiraCode, Hack, Meslo)
-  - Theme JSONs & env var
-  - PowerShell profile
-  - Windows Terminal settings.json
+  Fully tears down everything installed by autotronic.ps1:
+   - Oh My Posh (exe, PSGallery, WindowsApps shims)
+   - Terminal-Icons (PowerShell module)
+   - Nerd Fonts (FiraCode, Hack, Meslo) in registry + files
+   - Themes directory + POSH_THEMES_PATH
+   - All relevant PowerShell profiles
+   - Windows Terminal settings.json
+.DESCRIPTION
+  Each step is idempotent, logged, and errors are isolated. 
+  Backups of user-modified files (profiles, settings.json) are timestamped.
 #>
 
-#region Helper: Log to console
+#region — Helpers & Logging
 function Write-Log {
-    param([string]$Message, [ValidateSet('INFO','WARN','ERROR')]$Level='INFO')
+    param(
+        [Parameter(Mandatory)][ValidateSet('INFO','WARN','ERROR')] 
+        [string]$Level,
+        [Parameter(Mandatory)][string]$Message
+    )
     $ts = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
-    Write-Host "[$ts] [$Level] $Message"
+    $prefix = "[${ts}] [$Level]"
+    if ($Level -eq 'ERROR') {
+        Write-Host "$prefix $Message" -ForegroundColor Red
+    } elseif ($Level -eq 'WARN') {
+        Write-Host "$prefix $Message" -ForegroundColor Yellow
+    } else {
+        Write-Host "$prefix $Message"
+    }
+}
+
+function Safe-RemoveItem {
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [switch]$Recurse
+    )
+    try {
+        if (Test-Path $Path) {
+            if ($Recurse) { Remove-Item $Path -Recurse -Force }
+            else         { Remove-Item $Path -Force }
+            Write-Log INFO "Removed: $Path"
+        }
+    } catch {
+        Write-Log WARN "Could not remove $Path — $($_.Exception.Message)"
+    }
+}
+
+function Backup-File {
+    param(
+        [Parameter(Mandatory)][string]$FilePath
+    )
+    if (Test-Path $FilePath) {
+        $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
+        $backup = "${FilePath}.bak-$stamp"
+        try {
+            Copy-Item $FilePath $backup -Force
+            Write-Log INFO "Backed up $FilePath → $backup"
+        } catch {
+            Write-Log WARN "Failed to back up $FilePath — $($_.Exception.Message)"
+        }
+    }
+}
+
+function Remove-UserEnvPath {
+    param([Parameter(Mandatory)][string]$Folder)
+    $current = [Environment]::GetEnvironmentVariable('Path','User').Split(';')
+    if ($current -contains $Folder) {
+        $new = ($current | Where-Object { $_ -ne $Folder }) -join ';'
+        [Environment]::SetEnvironmentVariable('Path',$new,'User')
+        Write-Log INFO "Stripped user PATH entry: $Folder"
+    }
 }
 #endregion
 
-# ─────────────────────────────────────────────────────────────
-# 1) Remove Oh My Posh
-# ─────────────────────────────────────────────────────────────
-Write-Log "Removing Oh My Posh…" 'INFO'
-if (Get-Command winget -ErrorAction SilentlyContinue) {
-    winget uninstall --id JanDeDobbeleer.OhMyPosh -e --accept-package-agreements --accept-source-agreements -h | Out-Null
-}
-if (Get-Module -ListAvailable -Name oh-my-posh) {
-    Uninstall-Module -Name oh-my-posh -AllVersions -Force -ErrorAction SilentlyContinue
-}
-Write-Log "Oh My Posh removal complete." 'INFO'
-
-# ─────────────────────────────────────────────────────────────
-# 2) Remove Terminal-Icons
-# ─────────────────────────────────────────────────────────────
-Write-Log "Removing Terminal-Icons…" 'INFO'
-if (Get-Module -ListAvailable -Name 'Terminal-Icons') {
-    Uninstall-Module -Name 'Terminal-Icons' -AllVersions -Force -ErrorAction SilentlyContinue
-}
-Write-Log "Terminal-Icons removal complete." 'INFO'
-
-# ─────────────────────────────────────────────────────────────
-# 3) Uninstall Nerd Fonts
-# ─────────────────────────────────────────────────────────────
-function Remove-NerdFont([string]$FontLabel) {
-    $regPath = 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts'
-    # Remove registry entry
-    if (Get-ItemProperty -Path $regPath -ErrorAction SilentlyContinue | 
-        Where-Object { $_.PSObject.Properties.Name -eq "$FontLabel (TrueType)" }) {
-        Write-Log "Removing registry entry for $FontLabel" 'INFO'
-        Remove-ItemProperty -Path $regPath -Name "$FontLabel (TrueType)" -ErrorAction SilentlyContinue
-    }
-    # Remove font files
-    $fontsFolder = "$env:WINDIR\Fonts"
-    Get-ChildItem $fontsFolder -Filter "*$($FontLabel.Replace(' ','*'))*.ttf" -Recurse -ErrorAction SilentlyContinue |
-        ForEach-Object {
-            Write-Log "Deleting font file $($_.Name)" 'INFO'
-            Remove-Item $_.FullName -Force -ErrorAction SilentlyContinue
-        }
-}
-Write-Log "Uninstalling Nerd Fonts…" 'INFO'
-@('FiraCode Nerd Font','Hack Nerd Font','Meslo Nerd Font') | ForEach-Object { Remove-NerdFont $_ }
-Write-Log "Nerd Fonts removal complete." 'INFO'
-
-# ─────────────────────────────────────────────────────────────
-# 4) Remove theme JSONs & POSH_THEMES_PATH
-# ─────────────────────────────────────────────────────────────
-$themeDir = "$env:USERPROFILE\Documents\PowerShell\PoshThemes"
-if (Test-Path $themeDir) {
-    Write-Log "Deleting theme directory $themeDir" 'INFO'
-    Remove-Item $themeDir -Recurse -Force
-}
-Write-Log "Clearing POSH_THEMES_PATH user env var" 'INFO'
-[Environment]::SetEnvironmentVariable('POSH_THEMES_PATH',$null,'User')
-
-# ─────────────────────────────────────────────────────────────
-# 5) Remove PowerShell profile
-# ─────────────────────────────────────────────────────────────
-$profilePath = $Profile.CurrentUserAllHosts
-if (Test-Path $profilePath) {
-    Write-Log "Backing up and deleting profile $profilePath" 'INFO'
-    Copy-Item $profilePath ($profilePath + '.uninstallbak') -Force
-    Remove-Item $profilePath -Force
-}
-
-# ─────────────────────────────────────────────────────────────
-# 6) Remove Windows Terminal settings.json
-# ─────────────────────────────────────────────────────────────
-$settingsDir  = Join-Path $env:LOCALAPPDATA 'Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState'
-$settingsFile = Join-Path $settingsDir 'settings.json'
-if (Test-Path $settingsFile) {
-    Write-Log "Backing up and deleting Windows Terminal settings.json" 'INFO'
-    Copy-Item $settingsFile ($settingsFile + '.uninstallbak') -Force
-    Remove-Item $settingsFile -Force
-}
-
+#region — 1) Oh My Posh
 function Remove-OhMyPosh {
-    Write-Log "=== Removing Oh My Posh ===" 'INFO'
+    Write-Log INFO "=== Removing Oh My Posh ==="
 
-    # 1) Winget uninstall
-    Write-Log "→ winget uninstall JanDeDobbeleer.OhMyPosh" 'INFO'
-    try {
-        winget uninstall --id JanDeDobbeleer.OhMyPosh -e `
-            --accept-package-agreements --accept-source-agreements -h 2>&1 | Out-Null
-        Write-Log "   winget uninstall attempted." 'INFO'
-    } catch {
-        Write-Log "   winget uninstall failed: $($_.Exception.Message)" 'WARN'
+    # A) winget uninstall
+    if (Get-Command winget -ErrorAction SilentlyContinue) {
+        try {
+            winget uninstall --id=JanDeDobbeleer.OhMyPosh -e `
+                --accept-package-agreements --accept-source-agreements -h |
+                Out-Null
+            Write-Log INFO "winget package removed (if it existed)."
+        } catch {
+            Write-Log WARN "winget uninstall failed: $($_.Exception.Message)"
+        }
     }
 
-    # 2) PSGallery module uninstall
+    # B) PSGallery module
     if (Get-InstalledModule -Name oh-my-posh -ErrorAction SilentlyContinue) {
-        Write-Log "→ Uninstalling PowerShell module oh-my-posh" 'INFO'
-        Uninstall-Module -Name oh-my-posh -AllVersions -Force -ErrorAction SilentlyContinue
-    }
-
-    # 3) Remove any stub/shim in WindowsApps
-    $winApps = Join-Path $env:LOCALAPPDATA 'Microsoft\WindowsApps'
-    Write-Log "→ Deleting any oh-my-posh* in $winApps" 'INFO'
-    Get-ChildItem $winApps -Filter "oh-my-posh*" -Force -ErrorAction SilentlyContinue |
-        ForEach-Object {
-            Write-Log "   Removing shim $($_.Name)" 'INFO'
-            Remove-Item $_.FullName -Force -ErrorAction SilentlyContinue
+        try {
+            Uninstall-Module -Name oh-my-posh -AllVersions -Force
+            Write-Log INFO "PowerShell module 'oh-my-posh' removed."
+        } catch {
+            Write-Log WARN "Failed to remove PS module: $($_.Exception.Message)"
         }
-
-    # 4) Remove any oh-my-posh.exe found by Get-Command
-    $cmd = Get-Command oh-my-posh -ErrorAction SilentlyContinue
-    if ($cmd) {
-        $exePath = $cmd.Source
-        Write-Log "→ Found leftover executable at $exePath; deleting" 'INFO'
-        Remove-Item $exePath -Force -ErrorAction SilentlyContinue
     }
 
-    # 5) Sweep any other copies under LOCALAPPDATA\Programs
-    $programs = Join-Path $env:LOCALAPPDATA 'Programs'
-    Write-Log "→ Searching $programs for oh-my-posh.exe" 'INFO'
-    Get-ChildItem $programs -Recurse -Filter 'oh-my-posh.exe' -ErrorAction SilentlyContinue |
-        ForEach-Object {
-            Write-Log "   Deleting $_.FullName" 'INFO'
-            Remove-Item $_.FullName -Force -ErrorAction SilentlyContinue
-        }
-
-    # 6) Clean up user module folder
-    $modDir = Join-Path $env:USERPROFILE 'Documents\PowerShell\Modules\oh-my-posh'
-    if (Test-Path $modDir) {
-        Write-Log "→ Removing PSModule folder $modDir" 'INFO'
-        Remove-Item $modDir -Recurse -Force -ErrorAction SilentlyContinue
+    # C) remove WindowsApps stubs
+    $stubs = Join-Path $env:LOCALAPPDATA 'Microsoft\WindowsApps\oh-my-posh*'
+    Get-ChildItem $stubs -Force -ErrorAction SilentlyContinue | ForEach-Object {
+        Safe-RemoveItem $_.FullName
     }
 
-    Write-Log "Oh My Posh teardown complete." 'INFO'
+    # D) any loose exe in Programs
+    $progs = Join-Path $env:LOCALAPPDATA 'Programs'
+    Get-ChildItem $progs -Recurse -Filter 'oh-my-posh.exe' -ErrorAction SilentlyContinue |
+        ForEach-Object { Safe-RemoveItem $_.FullName }
+
+    # E) PATH cleanup
+    $installDir = Join-Path $env:LOCALAPPDATA 'Programs\oh-my-posh\bin'
+    Remove-UserEnvPath -Folder $installDir
 }
-
-# Invoke it
 Remove-OhMyPosh
+#endregion
 
+#region — 2) Terminal-Icons
+Write-Log INFO "=== Removing Terminal-Icons ==="
+if (Get-InstalledModule -Name Terminal-Icons -ErrorAction SilentlyContinue) {
+    try {
+        Uninstall-Module -Name Terminal-Icons -AllVersions -Force
+        Write-Log INFO "Terminal-Icons module removed."
+    } catch {
+        Write-Log WARN "Failed to remove Terminal-Icons: $($_.Exception.Message)"
+    }
+}
+#endregion
 
+#region — 3) Nerd Fonts (Registry + Files)
+Write-Log INFO "=== Removing Nerd Fonts ==="
+$fonts = @('FiraCode Nerd Font','Hack Nerd Font','Meslo Nerd Font')
+$regBases = 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts',
+            'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows NT\CurrentVersion\Fonts'
 
-# ─────────────────────────────────────────────────────────────
-# 7) Final cleanup
-# ─────────────────────────────────────────────────────────────
-Write-Log "Uninstall of all autotronic components complete." 'INFO'
-Write-Host ""
-Write-Host "⚠️  You may need to restart your shell/Windows Terminal for changes to fully apply." -ForegroundColor Yellow
+foreach ($label in $fonts) {
+    foreach ($reg in $regBases) {
+        $name = "$label (TrueType)"
+        try {
+            if ((Get-ItemProperty -Path $reg -Name $name -ErrorAction SilentlyContinue)) {
+                Remove-ItemProperty -Path $reg -Name $name -ErrorAction SilentlyContinue
+                Write-Log INFO "Removed registry font entry: $reg\$name"
+            }
+        } catch {
+            Write-Log WARN "Reg cleanup failed at $reg\${name}: $($_.Exception.Message)"
+        }
+    }
+    # Delete any matching .ttf under %windir%\Fonts
+    Get-ChildItem "$env:WINDIR\Fonts" -Filter "*$($label.Replace(' ','*')).ttf" -Recurse |
+        ForEach-Object { Safe-RemoveItem $_.FullName }
+}
+#endregion
+
+#region — 4) Themes & POSH_THEMES_PATH
+Write-Log INFO "=== Removing custom theme JSONs & env var ==="
+$themeDir = Join-Path $env:USERPROFILE 'Documents\PowerShell\PoshThemes'
+Backup-File $themeDir
+Safe-RemoveItem $themeDir -Recurse
+[Environment]::SetEnvironmentVariable('POSH_THEMES_PATH',$null,'User')
+Write-Log INFO "Cleared user env var POSH_THEMES_PATH"
+#endregion
+
+#region — 5) PowerShell Profiles
+Write-Log INFO "=== Removing PowerShell profiles ==="
+$profiles = @(
+    $Profile.CurrentUserAllHosts,
+    $Profile.CurrentUserCurrentHost,
+    $Profile.AllUsersAllHosts,
+    $Profile.AllUsersCurrentHost
+)
+foreach ($p in $profiles | Where-Object { $_ }) {
+    Backup-File $p
+    Safe-RemoveItem $p
+}
+#endregion
+
+#region — 6) Windows Terminal settings.json
+Write-Log INFO "=== Removing Windows Terminal settings.json ==="
+$wtDir  = Join-Path $env:LOCALAPPDATA 'Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState'
+$wtFile = Join-Path $wtDir 'settings.json'
+Backup-File $wtFile
+Safe-RemoveItem $wtFile
+#endregion
+
+Write-Log INFO "All components uninstalled. You may need to restart your shell/Windows Terminal."
