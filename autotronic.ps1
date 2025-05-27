@@ -223,69 +223,60 @@ function Install-NerdFonts {
 
 #-----------------MAIN ENTRY-----------------#
 function Ensure-OhMyPosh {
-    [CmdletBinding()]
-    param()
-
-    Write-Log "=== Ensuring Oh My Posh v5+ ===" 'INFO'
-
-    # 1) Remove old module cache (migration step)
-    if ($Env:POSH_PATH -and (Test-Path $Env:POSH_PATH)) {
-        Write-Log "Removing old cached binary at $Env:POSH_PATH" 'INFO'
-        Remove-Item $Env:POSH_PATH -Recurse -Force -ErrorAction SilentlyContinue
+    # 1) If the exe is already on PATH, we’re done
+    if (Get-Command oh-my-posh -ErrorAction SilentlyContinue) {
+        Write-Log "oh-my-posh.exe already on PATH. Skipping install." 'INFO'
+        return
     }
 
-    # 2) Uninstall the deprecated PowerShell module
-    if (Get-InstalledModule -Name oh-my-posh -ErrorAction SilentlyContinue) {
-        Write-Log "Uninstalling deprecated module oh-my-posh" 'INFO'
-        Uninstall-Module -Name oh-my-posh -AllVersions -Force -ErrorAction SilentlyContinue
-    }
-
-    # 3) Make sure winget is available
+    # 2) Make sure winget exists
     if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
-        throw "winget not found; please install the 'App Installer' from the Microsoft Store."
+        throw "winget not found. Please install the 'App Installer' from the Microsoft Store."
     }
 
-    Write-Log "Installing (or upgrading) oh-my-posh via winget…" 'INFO'
-    $wingetOutput = & winget install --id JanDeDobbeleer.OhMyPosh -e `
-        --accept-package-agreements --accept-source-agreements -h 2>&1
-    $exitCode     = $LASTEXITCODE
+    Write-Log "Installing / upgrading Oh My Posh via winget…" 'INFO'
+    $wingetOutput = winget install JanDeDobbeleer.OhMyPosh -s winget
+    $code = $LASTEXITCODE
 
-    Write-Log "Winget exit code: $exitCode" 'INFO'
+    Write-Log "Winget exit code: $code" 'INFO'
     Write-Log "Winget output:`n$wingetOutput" 'INFO'
 
-    # 4) Treat zero *or* "no newer versions" as success
+    # 3) Treat both '0' and 'already latest' as success
     if (
-        $exitCode -eq 0 -or
-        ($wingetOutput -match 'No newer package versions are available')
+        $code -eq 0 -or
+        $wingetOutput -match 'No newer package versions are available'
     ) {
-        Write-Log "Winget reports oh-my-posh is at the latest version." 'INFO'
+        Write-Log "Winget reports Oh My Posh at latest version." 'INFO'
 
-        # 5) Refresh the current session's PATH to include WindowsApps
-        $winApps = "$Env:LOCALAPPDATA\Microsoft\WindowsApps"
+        # 4) Immediately refresh PATH for WindowsApps
+        $winApps = "$env:LOCALAPPDATA\Microsoft\WindowsApps"
         if (
-            (Test-Path $winApps) -and
-            (-not ($Env:Path.Split(';') -contains $winApps))
+        (Test-Path $winApps) -and
+        (-not ($env:Path.Split(';') -contains $winApps))
         ) {
-            Write-Log "Adding $winApps to this session's PATH" 'INFO'
-            $Env:Path = "$winApps;$Env:Path"
+        Write-Log "Adding WindowsApps ($winApps) to current session PATH" 'INFO'
+        $env:Path = "$winApps;$env:Path"
         }
 
-        # 6) Verify the binary is now discoverable
-        if (Get-Command oh-my-posh -ErrorAction SilentlyContinue) {
-            Write-Log "oh-my-posh.exe is on PATH. Install complete." 'INFO'
-            return
-        }
-        else {
-            Write-Log "Warning: oh-my-posh.exe still not found after PATH update." 'WARN'
-            Write-Log "Please restart your shell or log off/on." 'WARN'
-            return
+        # 5) Now verify the exe is actually discoverable
+        if (
+        (Test-Path $winApps) -and
+        (-not ($Env:Path.Split(';') -contains $winApps))
+        ) {
+        Write-Log "Adding WindowsApps ($winApps) to current session PATH" 'INFO'
+        $Env:Path = "$winApps;$Env:Path"
         }
     }
 
-    # 7) If we reach here, winget truly failed
-    throw "winget failed to install or upgrade oh-my-posh; aborting."
-}
+    # 6) If we get here, winget truly failed us—fall back to the PSGallery module
+    Write-Log "Winget install failed fatally; falling back to PSGallery module…" 'WARN'
+    if (Install-WithPSGallery) {
+        Write-Log "oh-my-posh module installed via PSGallery (no standalone exe)." 'INFO'
+        return
+    }
 
+    throw "Failed to install Oh My Posh via winget or PSGallery."
+}
 
 function Ensure-TerminalIcons {
     if (Test-TerminalIconsInstalled) {
@@ -315,53 +306,84 @@ if ($MyInvocation.InvocationName -eq '.\Install-NerdFonts.ps1' -or $MyInvocation
     Ensure-NerdFonts
 }
 
+#-----------------SETUP THEMES AND PROFILES-----------------#
+
 $github    = 'https://raw.githubusercontent.com/Kezreux/powershell_style/main'
-$themeDir  = "$env:USERPROFILE\Documents\PowerShell\PoshThemes"
-$themeFile = Join-Path $themeDir 'aanestad.omp.json'
 
-if (-not (Test-Path $themeDir)) {
-    Write-Log "Creating theme directory $themeDir" 'INFO'
-    New-Item -Path $themeDir -ItemType Directory | Out-Null
+function Ensure-PoshTheme {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$GithubRoot,
+        [Parameter()][string]$ThemeName = 'aanestad.omp.json'
+    )
+
+    $themeDir  = Join-Path $HOME 'Documents\PowerShell\PoshThemes'
+    $themeFile = Join-Path $themeDir $ThemeName
+    $themeUrl  = "$GithubRoot/theme/$ThemeName"
+
+    Write-Log "Ensuring PoshTheme $ThemeName → $themeFile" 'INFO'
+
+    if (-not (Test-Path $themeDir)) {
+        Write-Log "Creating theme directory $themeDir" 'INFO'
+        New-Item -Path $themeDir -ItemType Directory | Out-Null
+    }
+
+    Update-RemoteFile -Url $themeUrl -DestinationPath $themeFile
+    Write-Log "PoshTheme updated at $themeFile" 'INFO'
 }
 
-$themeUrl = "$github/theme/aanestad.omp.json"
-Update-RemoteFile -Url $themeUrl -DestinationPath $themeFile
+function Ensure-PowerShellProfile {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$GithubRoot,
+        # PS7/Core loads "profile.ps1" under Documents\PowerShell
+        [Parameter()][string]$ProfileName = 'profile.ps1'
+    )
 
+    $profileDir    = Join-Path $HOME 'Documents\PowerShell'
+    $targetProfile = Join-Path $profileDir $ProfileName
+    $remoteProfile = "$GithubRoot/profile/Microsoft.PowerShell_profile.ps1"
 
-$remoteProfile = "$github/profile/Microsoft.PowerShell_profile.ps1"
-$targetProfile = $Profile.CurrentUserAllHosts
+    Write-Log "Ensuring PowerShell profile → $targetProfile" 'INFO'
 
-$profileDir = Split-Path $targetProfile
-if (-not (Test-Path $profileDir)) {
-    Write-Log "Creating profile directory $profileDir" 'INFO'
-    New-Item -Path $profileDir -ItemType Directory | Out-Null
+    if (-not (Test-Path $profileDir)) {
+        Write-Log "Creating profile directory $profileDir" 'INFO'
+        New-Item -Path $profileDir -ItemType Directory | Out-Null
+    }
+
+    Update-RemoteFile -Url $remoteProfile -DestinationPath $targetProfile
+    Write-Log "PowerShell profile updated at $targetProfile" 'INFO'
 }
 
-Update-RemoteFile `
-  -Url $remoteProfile `
-  -DestinationPath $targetProfile
+function Ensure-WindowsTerminalSettings {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$GithubRoot,
+        [Parameter()][string]$SettingsName = 'settings.json'
+    )
 
-Write-Log "Replaced default profile with custom profile at:`n  $targetProfile" 'INFO'
+    $settingsDir   = Join-Path $env:LOCALAPPDATA 'Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState'
+    $localSettings = Join-Path $settingsDir $SettingsName
+    $remoteSettings= "$GithubRoot/terminal/$SettingsName"
 
-$remoteSettings = "$github/terminal/settings.json"
+    Write-Log "Ensuring Windows Terminal settings → $localSettings" 'INFO'
 
-$settingsDir  = Join-Path $env:LOCALAPPDATA 'Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState'
-$localSettings = Join-Path $settingsDir 'settings.json'
+    if (-not (Test-Path $settingsDir)) {
+        Write-Log "Creating Terminal settings directory $settingsDir" 'INFO'
+        New-Item -Path $settingsDir -ItemType Directory | Out-Null
+    }
 
-if (-not (Test-Path $settingsDir)) {
-    Write-Log "Terminal settings directory not found; creating: $settingsDir" 'INFO'
-    New-Item -Path $settingsDir -ItemType Directory | Out-Null
+    Update-RemoteFile -Url $remoteSettings -DestinationPath $localSettings
+    Write-Log "Windows Terminal settings updated at $localSettings" 'INFO'
 }
 
-Update-RemoteFile `
-    -Url $remoteSettings `
-    -DestinationPath $localSettings
-
-Write-Log "Windows Terminal settings.json updated at:`n  $localSettings" 'INFO'
 
 #-----------------RUN THE INSTALLER-----------------#
 Ensure-OhMyPosh
 Ensure-TerminalIcons
 Ensure-NerdFonts -Fonts @('FiraCode','Hack','Meslo')
+Ensure-PoshTheme
+Ensure-PowerShellProfile
+Ensure-WindowsTerminalSettings
 
 
