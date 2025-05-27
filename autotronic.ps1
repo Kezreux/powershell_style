@@ -223,66 +223,51 @@ function Install-NerdFonts {
 
 #-----------------MAIN ENTRY-----------------#
 function Ensure-OhMyPosh {
-    if (Test-OhMyPoshInstalled) {
-        Write-Log "Oh My Posh is already installed. Skipping." 'INFO' 
+    # 1) Already there?
+    if (Get-Command oh-my-posh -ErrorAction SilentlyContinue) {
+        Write-Log "Oh My Posh already installed. Skipping." 'INFO'
         return
     }
 
-    Write-Log "Oh My Posh not found. Installing…" 'INFO'
-
-    # Try winget first
-    if (Get-Command 'winget' -ErrorAction SilentlyContinue) {
-        if (Install-WithWinget) {
-            Write-Log "Oh My Posh installation complete via winget." 'INFO'
-            return
-        }
-    }
-    else {
-        Write-Log "winget not available on this system." 'WARN'
-    }
-
-        if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
-        throw "winget not found. Please install the App Installer from the Microsoft Store."
+    # 2) Require Winget
+    if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
+        throw "winget not found. Install 'App Installer' from the Microsoft Store."
     }
 
     Write-Log "Installing Oh My Posh via winget…" 'INFO'
-    try {
-        winget install --id JanDeDobbeleer.OhMyPosh -e --accept-package-agreements --accept-source-agreements -h
-        Write-Log "Oh My Posh successfully installed via winget." 'INFO'
-    }
-    catch {
-        throw "winget failed to install Oh My Posh: $($_.Exception.Message)"
-    }
+    $wingetOutput = & winget install --id JanDeDobbeleer.OhMyPosh -e `
+        --accept-package-agreements --accept-source-agreements -h 2>&1
+    $code = $LASTEXITCODE
 
-    if (Get-Command 'oh-my-posh' -ErrorAction SilentlyContinue) {
-    Import-Module oh-my-posh -ErrorAction SilentlyContinue
+    Write-Log "Winget exit code: $code" 'INFO'
+    Write-Log "Winget output:`n$wingetOutput" 'INFO'
 
-    if ($Env:POSH_THEMES_PATH) {
-        $theme = Join-Path $Env:POSH_THEMES_PATH 'aanestad.omp.json'
-        if (Test-Path $theme) {
-            Set-PoshPrompt -Theme $theme
+    if ($code -eq 0) {
+        # WindowsApps entries sometimes need a moment (or a shell restart) to show up
+        Start-Sleep -Seconds 2
+        if (Get-Command oh-my-posh -ErrorAction SilentlyContinue) {
+            Write-Log "oh-my-posh.exe found on PATH. Install successful." 'INFO'
+            return
         }
         else {
-            Write-Host "⚠ Theme file not found at $theme" -ForegroundColor Yellow
+            Write-Log "oh-my-posh.exe not yet on PATH. You may need to restart your shell or log off/on." 'WARN'
+            return
         }
     }
-    else {
-        Write-Host "⚠ POSH_THEMES_PATH not set; Oh My Posh theme not applied." -ForegroundColor Yellow
-    }
-    }
-    else {
-        Write-Host "⚠ oh-my-posh.exe not found; using default prompt." -ForegroundColor Yellow
-    }
 
-
-    # Fallback to PowerShell Gallery
-    if (Install-WithPSGallery) {
-        Write-Log "Oh My Posh installation complete via PSGallery." 'INFO'
+    # 3) Winget failed—fall back to PSGallery module
+    Write-Log "Winget install failed (exit code $code). Falling back to PSGallery module…" 'WARN'
+    try {
+        Install-Module -Name oh-my-posh -Scope CurrentUser -Force -AllowClobber -ErrorAction Stop
+        Import-Module oh-my-posh -ErrorAction Stop
+        Write-Log "Installed oh-my-posh from PSGallery." 'INFO'
         return
     }
-
-    throw "Failed to install Oh My Posh via both winget and PSGallery."
+    catch {
+        throw "Failed to install oh-my-posh via both winget and PSGallery: $($_.Exception.Message)"
+    }
 }
+
 
 function Ensure-TerminalIcons {
     if (Test-TerminalIconsInstalled) {
