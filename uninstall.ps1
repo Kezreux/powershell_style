@@ -94,53 +94,55 @@ if (Test-Path $settingsFile) {
 }
 
 function Remove-OhMyPosh {
-    Write-Log "Uninstalling Oh My Posh…" 'INFO'
+    Write-Log "=== Removing Oh My Posh ===" 'INFO'
 
-    # 1) PSGallery
-    if (Get-InstalledModule oh-my-posh -ErrorAction SilentlyContinue) {
-        Write-Log "→ Found PSGallery module; uninstalling…" 'INFO'
-        Uninstall-Module -Name oh-my-posh -AllVersions -Force -ErrorAction SilentlyContinue
-        Write-Log "   PSGallery module removed." 'INFO'
+    # 1) Winget uninstall (catches msstore & community source)
+    Write-Log "Attempting winget uninstall of JanDeDobbeleer.OhMyPosh…" 'INFO'
+    try {
+        & winget uninstall --id JanDeDobbeleer.OhMyPosh -e `
+            --accept-package-agreements --accept-source-agreements -h 2>&1 | Out-Null
+        Write-Log "  winget uninstall complete (if it was installed)." 'INFO'
+    }
+    catch {
+        Write-Log "  winget uninstall failed or not present: $($_.Exception.Message)" 'WARN'
     }
 
-    # 2) Winget
-    $wingetPkg = winget list --source winget | Where-Object { $_.Id -eq 'JanDeDobbeleer.OhMyPosh' -or $_.Name -match 'Oh My Posh' }
-    if ($wingetPkg) {
-        Write-Log "→ Found winget package $($wingetPkg.Id); uninstalling…" 'INFO'
-        winget uninstall --id $wingetPkg.Id -e --accept-package-agreements --accept-source-agreements -h | Out-Null
-        Write-Log "   Winget package removed." 'INFO'
+    # 2) Remove any Appx/MSIX if it still lingers
+    Write-Log "Checking for Appx/MSIX package…" 'INFO'
+    $appx = Get-AppxPackage -Name "*oh-my-posh*" -ErrorAction SilentlyContinue
+    if ($appx) {
+        Write-Log "  Found Appx package $($appx.PackageFullName); removing…" 'INFO'
+        Remove-AppxPackage -Package $appx.PackageFullName -ErrorAction SilentlyContinue
+        Write-Log "  Appx package removed." 'INFO'
+    }
+    else {
+        Write-Log "  No Appx/MSIX package found." 'INFO'
     }
 
-    # 3) Standalone executable directory
-    $cmd = Get-Command oh-my-posh -ErrorAction SilentlyContinue
-    if ($cmd) {
-        $exePath    = $cmd.Source
-        $installDir = Split-Path $exePath -Parent -Parent  # two levels up: bin\..
-        Write-Log "→ Found standalone install at $installDir; deleting entire folder…" 'INFO'
-        try {
-            Remove-Item $installDir -Recurse -Force -ErrorAction Stop
-            Write-Log "   Deleted $installDir." 'INFO'
+    # 3) Remove any shims in WindowsApps
+    $winApps = Join-Path $env:LOCALAPPDATA 'Microsoft\WindowsApps'
+    Write-Log "Cleaning up any oh-my-posh shims in $winApps…" 'INFO'
+    Get-ChildItem $winApps -Filter "oh-my-posh*" -Force -ErrorAction SilentlyContinue |
+        ForEach-Object {
+            Write-Log "  Deleting shim $($_.FullName)" 'INFO'
+            Remove-Item $_.FullName -Force -ErrorAction SilentlyContinue
         }
-        catch {
-            Write-Log "   Failed to remove standalone folder: $($_.Exception.Message)" 'WARN'
-        }
+
+    # 4) Remove any standalone install folder (e.g. if you used manual MSI fallback)
+    $installDir = Join-Path $env:LOCALAPPDATA 'Programs\oh-my-posh'
+    if (Test-Path $installDir) {
+        Write-Log "Removing leftover folder $installDir…" 'INFO'
+        Remove-Item $installDir -Recurse -Force -ErrorAction SilentlyContinue
     }
 
-    # 4) Leftover user Modules folder
+    # 5) Remove any modules under user profile
     $modDir = Join-Path $env:USERPROFILE 'Documents\PowerShell\Modules\oh-my-posh'
     if (Test-Path $modDir) {
-        Write-Log "→ Removing leftover module folder $modDir" 'INFO'
+        Write-Log "Removing PSModule folder $modDir…" 'INFO'
         Remove-Item $modDir -Recurse -Force -ErrorAction SilentlyContinue
     }
 
-    Write-Log "Oh My Posh uninstall complete." 'INFO'
-}
-
-$installDir = Join-Path $env:LOCALAPPDATA 'Programs\oh-my-posh'
-if (Test-Path $installDir) {
-    Write-Log "→ Deleting standalone install at $installDir" 'INFO'
-    Remove-Item $installDir -Recurse -Force -ErrorAction SilentlyContinue
-    Write-Log "   Deleted $installDir." 'INFO'
+    Write-Log "Oh My Posh teardown complete." 'INFO'
 }
 
 # Invoke it:

@@ -223,100 +223,61 @@ function Install-NerdFonts {
 
 #-----------------MAIN ENTRY-----------------#
 function Ensure-OhMyPosh {
-    # 1) Already installed?
+    # 1) If the exe is already on PATH, we’re done
     if (Get-Command oh-my-posh -ErrorAction SilentlyContinue) {
-        Write-Log "oh-my-posh.exe already on PATH. Skipping." 'INFO'
+        Write-Log "oh-my-posh.exe already on PATH. Skipping install." 'INFO'
         return
     }
 
-    # 2) Winget attempt
-    if (Get-Command winget -ErrorAction SilentlyContinue) {
-        Write-Log "Installing Oh My Posh via winget…" 'INFO'
-        $out = & winget install --id JanDeDobbeleer.OhMyPosh -e `
-            --accept-package-agreements --accept-source-agreements -h 2>&1
-        $code = $LASTEXITCODE
-        Write-Log "Winget exit code: $code" 'INFO'
-        Write-Log "Winget output:`n$out" 'INFO'
+    # 2) Make sure winget exists
+    if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
+        throw "winget not found. Please install the 'App Installer' from the Microsoft Store."
+    }
 
-        Start-Sleep -Seconds 2  # allow WindowsApps registration
+    Write-Log "Installing / upgrading Oh My Posh via winget…" 'INFO'
+    $wingetOutput = & winget install --id JanDeDobbeleer.OhMyPosh -e `
+        --accept-package-agreements --accept-source-agreements -h 2>&1
+    $code = $LASTEXITCODE
+
+    Write-Log "Winget exit code: $code" 'INFO'
+    Write-Log "Winget output:`n$wingetOutput" 'INFO'
+
+    # 3) Treat both '0' and 'already latest' as success
+    if (
+        $code -eq 0 -or
+        $wingetOutput -match 'No newer package versions are available'
+    ) {
+        Write-Log "Winget reports Oh My Posh at latest version." 'INFO'
+
+        # 4) Immediately refresh PATH for WindowsApps
+        $winApps = "$env:LOCALAPPDATA\Microsoft\WindowsApps"
+        if (Test-Path $winApps -and -not ($env:Path.Split(';') -contains $winApps)) {
+            Write-Log "Adding WindowsApps ($winApps) to current session PATH" 'INFO'
+            $env:Path = "$winApps;$env:Path"
+        }
+
+        # 5) Now verify the exe is actually discoverable
         if (Get-Command oh-my-posh -ErrorAction SilentlyContinue) {
-            Write-Log "oh-my-posh.exe found on PATH after winget." 'INFO'
+            Write-Log "oh-my-posh.exe found on PATH. Install successful." 'INFO'
             return
         }
         else {
-            Write-Log "oh-my-posh.exe still missing after winget." 'WARN'
-        }
-    }
-    else {
-        Write-Log "winget not found; skipping winget path." 'WARN'
-    }
-
-    # 3) PSGallery (module-only)
-    Write-Log "Falling back to PSGallery module install…" 'INFO'
-    try {
-        Install-Module -Name oh-my-posh -Scope CurrentUser -Force -AllowClobber -ErrorAction Stop
-        Import-Module oh-my-posh -ErrorAction Stop
-        Write-Log "PSGallery oh-my-posh module installed." 'INFO'
-    }
-    catch {
-        Write-Log "PSGallery install failed: $($_.Exception.Message)" 'ERROR'
-    }
-
-    # Check again for module cmdlets (Set-PoshPrompt etc), but no exe:
-    if (Get-Command Set-PoshPrompt -ErrorAction SilentlyContinue) {
-        Write-Log "Set-PoshPrompt available via module." 'INFO'
-    }
-    else {
-        Write-Log "Set-PoshPrompt not available; module install failed." 'WARN'
-    }
-
-    # 4) Manual GitHub release fallback for the standalone binary
-    Write-Log "Attempting manual download of oh-my-posh.exe from GitHub releases…" 'INFO'
-    try {
-        # Fetch latest tag
-        $release = Invoke-RestMethod -Uri 'https://api.github.com/repos/JanDeDobbeleer/oh-my-posh/releases/latest' -UseBasicParsing
-        $tag     = $release.tag_name
-        # Find the Windows amd64 zip asset
-        $asset = $release.assets | Where-Object { $_.name -like '*windows-amd64.zip' } | Select-Object -First 1
-        if (-not $asset) {
-            throw "No windows-amd64.zip asset found in release $tag"
-        }
-        $tmpZip = Join-Path $env:TEMP $asset.name
-        Write-Log "Downloading $($asset.name) from v$tag…" 'INFO'
-        Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $tmpZip -UseBasicParsing -ErrorAction Stop
-
-        # Extract the exe
-        $installDir = Join-Path $env:LOCALAPPDATA 'Programs\oh-my-posh'
-        $binDir     = Join-Path $installDir 'bin'
-        Remove-Item $installDir -Recurse -Force -ErrorAction SilentlyContinue
-        New-Item -Path $binDir -ItemType Directory | Out-Null
-
-        Expand-Archive -Path $tmpZip -DestinationPath $binDir -Force
-        Remove-Item $tmpZip -Force
-
-        # Ensure the binDir is on the current session PATH and persistently
-        if (-not ($Env:Path.Split(';') -contains $binDir)) {
-            Write-Log "Adding $binDir to PATH (User scope)" 'INFO'
-            $newPath = ($Env:Path + ';' + $binDir).Trim(';')
-            [Environment]::SetEnvironmentVariable('Path', $newPath, 'User')
-            $Env:Path = $newPath
-        }
-
-        # Final check
-        if (Get-Command oh-my-posh -ErrorAction SilentlyContinue) {
-            Write-Log "Manually downloaded oh-my-posh.exe and added to PATH." 'INFO'
+            Write-Log "oh-my-posh.exe still not on PATH after PATH refresh." 'WARN'
+            Write-Log "You may need to fully restart your shell or log off/on." 'WARN'
             return
         }
-        else {
-            throw "oh-my-posh.exe still not found after manual download."
-        }
-    }
-    catch {
-        Write-Log "Manual download fallback failed: $($_.Exception.Message)" 'ERROR'
     }
 
-    throw "Unable to install oh-my-posh via winget, PSGallery, or manual download."
+    # 6) If we get here, winget truly failed us—fall back to the PSGallery module
+    Write-Log "Winget install failed fatally; falling back to PSGallery module…" 'WARN'
+    if (Install-WithPSGallery) {
+        Write-Log "oh-my-posh module installed via PSGallery (no standalone exe)." 'INFO'
+        return
+    }
+
+    throw "Failed to install Oh My Posh via winget or PSGallery."
 }
+
 
 
 
