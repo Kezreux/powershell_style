@@ -309,6 +309,7 @@ if ($MyInvocation.InvocationName -eq '.\Install-NerdFonts.ps1' -or $MyInvocation
 #-----------------SETUP THEMES AND PROFILES-----------------#
 
 $github    = 'https://raw.githubusercontent.com/Kezreux/powershell_style/main'
+$remoteProfile = "$github/profile/Microsoft.PowerShell_profile.ps1"
 
 function Ensure-PoshTheme {
     [CmdletBinding()]
@@ -335,25 +336,29 @@ function Ensure-PoshTheme {
 function Ensure-PowerShellProfile {
     [CmdletBinding()]
     param(
-        [Parameter(Mandatory)][string]$GithubRoot,
-        # PS7/Core loads "profile.ps1" under Documents\PowerShell
-        [Parameter()][string]$ProfileName = 'profile.ps1'
+        [Parameter(Mandatory)]
+        [string]$RemoteProfileUrl,
+
+        [Parameter()]
+        [string]$LocalProfilePath = $Profile.CurrentUserCurrentHost
     )
 
-    $profileDir    = Join-Path $HOME 'Documents\PowerShell'
-    $targetProfile = Join-Path $profileDir $ProfileName
-    $remoteProfile = "$GithubRoot/profile/Microsoft.PowerShell_profile.ps1"
+    Write-Log "Ensuring PowerShell profile at $LocalProfilePath" 'INFO'
 
-    Write-Log "Ensuring PowerShell profile → $targetProfile" 'INFO'
-
+    # Make sure the parent folder exists
+    $profileDir = Split-Path $LocalProfilePath
     if (-not (Test-Path $profileDir)) {
         Write-Log "Creating profile directory $profileDir" 'INFO'
         New-Item -Path $profileDir -ItemType Directory | Out-Null
     }
 
-    Update-RemoteFile -Url $remoteProfile -DestinationPath $targetProfile
-    Write-Log "PowerShell profile updated at $targetProfile" 'INFO'
+    # Backup & download
+    Update-RemoteFile -Url $RemoteProfileUrl -DestinationPath $LocalProfilePath
+
+    Write-Log "Updated PowerShell profile at:`n  $LocalProfilePath" 'INFO'
 }
+
+
 
 function Ensure-WindowsTerminalSettings {
     [CmdletBinding()]
@@ -383,7 +388,7 @@ Ensure-OhMyPosh
 Ensure-TerminalIcons
 Ensure-NerdFonts -Fonts @('FiraCode','Hack','Meslo')
 Ensure-PoshTheme -GithubRoot $github -ThemeName 'aanestad.omp.json'
-Ensure-PowerShellProfile -GithubRoot $github -ProfileName 'profile.ps1'
+Ensure-PowerShellProfile -RemoteProfileUrl $remoteProfile
 Ensure-WindowsTerminalSettings -GithubRoot $github -SettingsName 'settings.json'
 
 Write-Log "Installation complete! Please restart your terminal." 'INFO'
