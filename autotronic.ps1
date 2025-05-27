@@ -235,8 +235,7 @@ function Ensure-OhMyPosh {
     }
 
     Write-Log "Installing / upgrading Oh My Posh via winget…" 'INFO'
-    $wingetOutput = & winget install --id JanDeDobbeleer.OhMyPosh -e `
-        --accept-package-agreements --accept-source-agreements -h 2>&1
+    $wingetOutput = winget install JanDeDobbeleer.OhMyPosh -s winget
     $code = $LASTEXITCODE
 
     Write-Log "Winget exit code: $code" 'INFO'
