@@ -18,6 +18,7 @@ function Write-Log {
         switch ($Level) {
             'ERROR' { $Color = 'Red'    }
             'WARN'  { $Color = 'Yellow' }
+            'DEBUG' { $Color = 'Orange' }
             default { $Color = 'Green'  }
         }
     }

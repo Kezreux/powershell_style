@@ -1,8 +1,6 @@
 # Set the theme path explicitly so it’s always valid
 $env:POSH_THEMES_PATH = "$HOME\Documents\PowerShell\PoshThemes"
 
-Import-Module oh-my-posh
-
 # Only try to init if oh-my-posh.exe is on the PATH
 if (Get-Command oh-my-posh -ErrorAction SilentlyContinue) {
     oh-my-posh init pwsh --config "$env:POSH_THEMES_PATH\aanestad.omp.json" | Invoke-Expression
